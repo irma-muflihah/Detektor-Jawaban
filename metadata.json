@@ -1,6 +1,10 @@
 {
-  "name": "Detektor Jawaban",
-  "description": "Aplikasi OMR Scanner Lembar Jawaban Komputer (LJK) berbasis AI Vision untuk pemeriksaan otomatis ujian sekolah. Dikembangkan oleh Irma Muflihah, S.Pd. Guru Matematika SMPN 2 Kemranjen.",
-  "requestFramePermissions": ["camera"],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "name": "DEJAMU",
+  "description": "Detektor Jawaban Murid",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
