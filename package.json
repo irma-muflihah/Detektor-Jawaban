@@ -4,8 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0 --port 3000",
-    "build": "vue-tsc && vite build",
+    "dev": "vite --host 0.0.0.0 --port 3000 --open",
+    "build:app": "vue-tsc && vite build",
+    "build": "npm version patch --no-git-tag-version && npm run build:app && git add . && git commit -m \"Auto-build and version bump\" && git push",
+    "deploy": "vercel --prod",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -26,8 +28,11 @@
   "devDependencies": {
     "@types/file-saver": "^2.0.7",
     "@vitejs/plugin-vue": "^5.0.4",
+    "javascript-obfuscator": "^5.7.0",
+    "rollup-plugin-javascript-obfuscator": "^1.0.4",
     "sass": "^1.77.2",
     "typescript": "^5.2.2",
+    "vercel": "^59.23.2",
     "vite": "^5.2.11",
     "vue-tsc": "^2.0.19"
   }
