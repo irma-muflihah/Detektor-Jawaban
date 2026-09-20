@@ -1,12 +1,12 @@
 {
   "name": "dejamu",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 3000 --open",
-    "build:app": "vue-tsc && vite build",
-    "build": "npm version patch --no-git-tag-version && npm run build:app && git add . && git commit -m \"Auto-build and version bump\" && git push",
+    "build": "vue-tsc && vite build",
+    "release": "npm version patch --no-git-tag-version && npm run build && git add . && git commit -m \"Auto-build and version bump\" && git push",
     "deploy": "vercel --prod",
     "preview": "vite preview"
   },
