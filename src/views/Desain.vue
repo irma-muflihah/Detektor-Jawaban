@@ -54,13 +54,13 @@
           Tambah
         </v-btn>
         
-        <v-btn block color="grey-lighten-4" class="text-none text-grey-darken-3 mb-2 rounded-lg border" prepend-icon="mdi-auto-fix" @click="autoLayoutBlocks(true)">
-          Rapi Otomatis Sekali
+        <v-btn block color="primary" variant="tonal" class="text-none font-weight-bold mb-2 rounded-lg border" prepend-icon="mdi-auto-fix" @click="autoLayoutBlocks(true)">
+          Penataan Otomatis
         </v-btn>
 
         <v-switch
           v-model="omrStore.activeTemplate.autoLayout"
-          label="Auto Layout (Aktif)"
+          label="Penataan Otomatis (Dinamis)"
           color="primary"
           density="compact"
           hide-details
@@ -171,8 +171,8 @@
             
             <g v-if="block.type === 'handwritten_identity'">
               <rect :width="820" :height="220" fill="none" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,4" />
-              <rect x="0" y="-20" width="8" height="8" fill="#0f172a" rx="1" />
-              <text x="12" y="-10" font-size="14" font-weight="bold" fill="#334155" font-family="Inter, sans-serif">{{ block.title }}</text>
+              <rect x="0" y="-19" width="7" height="7" fill="#0f172a" rx="1.5" />
+              <text x="12" y="-13" font-size="11" font-weight="bold" fill="#334155" font-family="Inter, sans-serif">{{ block.title }}</text>
               <text x="15" y="25" font-size="12" font-weight="bold" font-family="Inter, sans-serif">Nama Lengkap:</text>
               <rect x="15" y="35" width="790" height="25" fill="none" stroke="#475569" stroke-width="1" />
               <text x="15" y="80" font-size="12" font-weight="bold" font-family="Inter, sans-serif">Kelas:</text>
@@ -193,8 +193,8 @@
                 <rect v-for="c in block.cols" :key="'z_col_'+c" v-show="(c-1) % 2 === 1" :x="(c-1)*32 + 4" y="0" width="32" :height="(block.rows||10) * 28 + 35" fill="#f8fafc" />
               </g>
               <rect :width="(block.cols||0) * 32 + 20" :height="(block.rows||10) * 28 + 60" fill="none" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,4" />
-              <rect x="0" y="-20" width="8" height="8" fill="#0f172a" rx="1" />
-              <text x="12" y="-10" font-size="14" font-weight="bold" fill="#334155" font-family="Inter, sans-serif">{{ block.title }}</text>
+              <rect x="0" y="-19" width="7" height="7" fill="#0f172a" rx="1.5" />
+              <text x="12" y="-13" font-size="11" font-weight="bold" fill="#334155" font-family="Inter, sans-serif">{{ block.title }}</text>
               
               <g v-for="c in block.cols" :key="'box'+c">
                 <rect :x="(c-1)*32 + 9" y="5" width="24" height="24" fill="none" stroke="#475569" stroke-width="1.5" />
@@ -233,8 +233,8 @@
                 <rect v-for="r in (block.type === 'bs3' ? (block.rows||1)*3 : block.rows)" :key="'z_row_'+r" v-show="(r-1) % 2 === 1" x="5" :y="(r-1)*30 + 5" :width="(block.options?.length||0) * 35 + 40" height="30" fill="#f8fafc" />
               </g>
               <rect :width="(block.options?.length||0) * 35 + 50" :height="(block.type === 'bs3' ? (block.rows||1)*3 : block.rows||1) * 30 + 10" fill="none" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,4" />
-              <rect x="0" y="-20" width="8" height="8" fill="#0f172a" rx="1" />
-              <text x="12" y="-10" font-size="14" font-weight="bold" fill="#334155" font-family="Inter, sans-serif">{{ block.title }}</text>
+              <rect x="0" y="-19" width="7" height="7" fill="#0f172a" rx="1.5" />
+              <text x="12" y="-13" font-size="11" font-weight="bold" fill="#334155" font-family="Inter, sans-serif">{{ block.title }}</text>
               
               <g v-for="r in (block.type === 'bs3' ? (block.rows||1)*3 : block.rows)" :key="'r'+r">
                 <text v-if="block.type !== 'bs3' || (r-1)%3 === 0" :x="10" :y="(r-1)*30 + 25" font-size="12" font-weight="bold" font-family="Inter, sans-serif">{{ (block.startNum||0) + (block.type === 'bs3' ? Math.floor((r-1)/3) : (r - 1)) }}.</text>
@@ -248,8 +248,8 @@
 
             <g v-else-if="block.type === 'teks_kustom'">
               <rect :width="block.cols || 150" :height="block.rows || 100" fill="none" stroke="#475569" stroke-width="2" />
-              <rect x="0" y="-20" width="8" height="8" fill="#0f172a" rx="1" />
-              <text x="12" y="-10" font-size="14" font-weight="bold" fill="#334155" font-family="Inter, sans-serif">{{ block.title }}</text>
+              <rect x="0" y="-19" width="7" height="7" fill="#0f172a" rx="1.5" />
+              <text x="12" y="-13" font-size="11" font-weight="bold" fill="#334155" font-family="Inter, sans-serif">{{ block.title }}</text>
               <foreignObject x="10" y="10" :width="(block.cols || 150) - 20" :height="(block.rows || 100) - 20">
                 <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: Inter, sans-serif; font-size: 14px; color: #0f172a; text-align: justify; word-wrap: break-word; line-height: 1.4; width: 100%; height: 100%; overflow: hidden; white-space: pre-wrap;">{{ block.prefillValue || 'Teks kosong' }}</div>
               </foreignObject>
@@ -275,18 +275,18 @@ const selectedRowCount = ref(10);
 
 const availableBlockTypes = [
   { id: 'handwritten_identity', label: 'ID: Tulis Tangan' },
-  { id: 'identity_nisn', label: 'ID: NISN (10x)' },
-  { id: 'identity_npsn', label: 'ID: NPSN (8x)' },
-  { id: 'identity_subject', label: 'ID: Mapel (2x)' },
-  { id: 'identity_test', label: 'ID: Tes (2x)' },
-  { id: 'biasa', label: 'Soal: PG (Huruf)' },
-  { id: 'kompleks', label: 'Soal: PG Kompleks' },
-  { id: 'bs', label: 'Soal: Benar/Salah' },
-  { id: 'bs3', label: 'Soal: Benar/Salah (3 Baris)' },
-  { id: 'sts', label: 'Soal: Sesuai/Tidak' },
-  { id: 'skala', label: 'Soal: Angka/Skala' },
-  { id: 'jodoh', label: 'Soal: Jodohkan' },
-  { id: 'teks_kustom', label: 'Teks Bebas / Keterangan' }
+  { id: 'identity_nisn', label: 'ID: NISN' },
+  { id: 'identity_npsn', label: 'ID: NPSN' },
+  { id: 'identity_subject', label: 'ID: Mapel' },
+  { id: 'identity_test', label: 'ID: Kode Tes' },
+  { id: 'biasa', label: 'PG' },
+  { id: 'kompleks', label: 'PG Kompleks' },
+  { id: 'bs', label: 'B / S' },
+  { id: 'bs3', label: 'B / S (3 Baris)' },
+  { id: 'sts', label: 'S / TS' },
+  { id: 'skala', label: 'Skala' },
+  { id: 'jodoh', label: 'Jodohkan' },
+  { id: 'teks_kustom', label: 'Teks Info' }
 ];
 
 const identityTypes = ['handwritten_identity', 'identity_nisn', 'identity_npsn', 'identity_subject', 'identity_test'];
@@ -326,7 +326,7 @@ const dynamicOptionChoices = computed(() => {
 const recalculateQuestionNumbers = () => {
   let currentStartNumber = 1;
   omrStore.activeTemplate.blocks.forEach((block: TemplateBlock) => {
-      if (!identityTypes.includes(block.type)) {
+      if (!identityTypes.includes(block.type) && block.type !== 'teks_kustom') {
           block.startNum = currentStartNumber;
           currentStartNumber += (block.rows || 0);
       }
@@ -402,22 +402,22 @@ const addBlock = () => {
               break;
           case 'biasa':
           case 'kompleks':
-              newBlock = { ...newBlock, title: type === 'biasa' ? 'Pilihan Ganda' : 'Pilihan Ganda Kompleks', direction: 'horizontal', rows: rowCount, options: generateAlphaOptions(optCount), startNum: 1 };
+              newBlock = { ...newBlock, title: type === 'biasa' ? 'PG' : 'PGK', direction: 'horizontal', rows: rowCount, options: generateAlphaOptions(optCount), startNum: 1 };
               break;
           case 'bs':
-              newBlock = { ...newBlock, title: 'Benar / Salah', direction: 'horizontal', rows: rowCount, options: ['B','S'], startNum: 1 };
+              newBlock = { ...newBlock, title: 'B / S', direction: 'horizontal', rows: rowCount, options: ['B','S'], startNum: 1 };
               break;
           case 'bs3':
-              newBlock = { ...newBlock, title: 'Benar / Salah (3 Baris)', direction: 'horizontal', rows: rowCount, options: ['B','S'], startNum: 1 };
+              newBlock = { ...newBlock, title: 'B/S (3B)', direction: 'horizontal', rows: rowCount, options: ['B','S'], startNum: 1 };
               break;
           case 'sts':
-              newBlock = { ...newBlock, title: 'Sesuai / Tak Sesuai', direction: 'horizontal', rows: rowCount, options: ['S','TS'], startNum: 1 };
+              newBlock = { ...newBlock, title: 'S / TS', direction: 'horizontal', rows: rowCount, options: ['S','TS'], startNum: 1 };
               break;
           case 'skala':
-              newBlock = { ...newBlock, title: 'Skala Kuesioner', direction: 'horizontal', rows: rowCount, options: generateNumericOptions(optCount), startNum: 1 };
+              newBlock = { ...newBlock, title: 'Skala', direction: 'horizontal', rows: rowCount, options: generateNumericOptions(optCount), startNum: 1 };
               break;
           case 'jodoh':
-              newBlock = { ...newBlock, title: 'Menjodohkan', direction: 'horizontal', rows: rowCount, options: generateAlphaOptions(optCount), startNum: 1 };
+              newBlock = { ...newBlock, title: 'Jodohkan', direction: 'horizontal', rows: rowCount, options: generateAlphaOptions(optCount), startNum: 1 };
               break;
           case 'teks_kustom':
               newBlock = { ...newBlock, title: 'Keterangan', direction: 'teks', prefillValue: 'Teks keterangan\nBisa multiline', cols: 150, rows: 100 };
@@ -443,84 +443,215 @@ const getBlockDimensions = (block: TemplateBlock) => {
   return { width, height };
 };
 
+// Partisi blok-blok ke dalam baris-baris secara dinamis (fluid) berdasarkan lebar kanvas
+const partitionBlocksIntoRows = (blockList: TemplateBlock[], maxWidth: number, minGap: number): TemplateBlock[][] => {
+  const rows: TemplateBlock[][] = [];
+  let currentRow: TemplateBlock[] = [];
+  let currentTotalWidth = 0;
+
+  for (const block of blockList) {
+    const dims = getBlockDimensions(block);
+    const neededWidth = currentRow.length === 0 ? dims.width : currentTotalWidth + minGap + dims.width;
+
+    if (currentRow.length > 0 && neededWidth > maxWidth) {
+      rows.push(currentRow);
+      currentRow = [block];
+      currentTotalWidth = dims.width;
+    } else {
+      currentRow.push(block);
+      currentTotalWidth = neededWidth;
+    }
+  }
+
+  if (currentRow.length > 0) {
+    rows.push(currentRow);
+  }
+
+  return rows;
+};
+
+// Posisikan satu baris blok secara merata dan seimbang (proporsional)
+const positionRowFluidly = (
+  row: TemplateBlock[],
+  yPos: number,
+  leftBound: number,
+  availableWidth: number,
+  minGap: number,
+  maxGap: number
+) => {
+  const k = row.length;
+  if (k === 0) return;
+
+  const dimsList = row.map(b => getBlockDimensions(b));
+  const totalBlockWidth = dimsList.reduce((sum, d) => sum + d.width, 0);
+  const remainingSpace = availableWidth - totalBlockWidth;
+
+  if (k === 1) {
+    const singleWidth = dimsList[0].width;
+    if (singleWidth >= availableWidth - 20) {
+      row[0].x = leftBound;
+    } else {
+      row[0].x = Math.round(leftBound + (availableWidth - singleWidth) / 2);
+    }
+    row[0].y = yPos;
+    return;
+  }
+
+  const rawGap = remainingSpace / (k - 1);
+
+  if (rawGap >= minGap && rawGap <= maxGap) {
+    // Ruang terisi penuh dan merata dari tepi kiri ke tepi kanan
+    let curX = leftBound;
+    for (let i = 0; i < k; i++) {
+      row[i].x = Math.round(curX);
+      row[i].y = yPos;
+      curX += dimsList[i].width + rawGap;
+    }
+  } else if (rawGap > maxGap) {
+    // Sisa ruang terlalu lebar: gunakan batas maksimum celah dan tengahkan baris dengan margin samping seimbang
+    const effectiveGap = maxGap;
+    const contentRowWidth = totalBlockWidth + (k - 1) * effectiveGap;
+    const sideMargin = Math.max(0, (availableWidth - contentRowWidth) / 2);
+
+    let curX = leftBound + sideMargin;
+    for (let i = 0; i < k; i++) {
+      row[i].x = Math.round(curX);
+      row[i].y = yPos;
+      curX += dimsList[i].width + effectiveGap;
+    }
+  } else {
+    // Area padat: distribusikan ruang yang tersisa secara proporsional
+    const effectiveGap = Math.max(4, remainingSpace / (k - 1));
+    let curX = leftBound;
+    for (let i = 0; i < k; i++) {
+      row[i].x = Math.round(curX);
+      row[i].y = yPos;
+      curX += dimsList[i].width + effectiveGap;
+    }
+  }
+};
+
 const autoLayoutBlocks = (force = false) => {
   if (!omrStore.activeTemplate.autoLayout && force !== true) return;
   try {
-      const MARGIN_TOP = 150; 
-      const MARGIN_LEFT = 90; 
-      const GAP_X_ID = 12; 
-      const GAP_X_SOAL = 40; 
-      const GAP_Y = 32; 
-      const MAX_Y_LIMIT = 1320; 
-      const MAX_HEADER_X = 920; 
+    const LEFT_BOUND = 90;
+    const RIGHT_BOUND = 910;
+    const USABLE_WIDTH = RIGHT_BOUND - LEFT_BOUND; // 820px
+    const MARGIN_TOP = 145;
+    const GAP_Y = 28;
+    const MAX_Y_LIMIT = 1320;
+    const MAX_NATURAL_GAP = 60;
+    const MIN_NATURAL_GAP = 14;
 
-      let warningShown = false;
-      let currentY = MARGIN_TOP;
-      
-      const blocks = omrStore.activeTemplate.blocks;
-      const handwrittenBlock = blocks.find((b: TemplateBlock) => b.type === 'handwritten_identity');
-      if (handwrittenBlock) {
-          handwrittenBlock.x = MARGIN_LEFT;
-          handwrittenBlock.y = currentY;
-          currentY += 220 + GAP_Y; 
+    let warningShown = false;
+    let currentY = MARGIN_TOP;
+    
+    const blocks = omrStore.activeTemplate.blocks;
+    if (!blocks || blocks.length === 0) return;
+
+    // 1. Data Peserta / Tulis Tangan (Lebar Penuh 820px)
+    const handwrittenBlock = blocks.find((b: TemplateBlock) => b.type === 'handwritten_identity');
+    if (handwrittenBlock) {
+      handwrittenBlock.x = LEFT_BOUND;
+      handwrittenBlock.y = currentY;
+      currentY += 220 + GAP_Y;
+    }
+
+    // 2. Blok Identitas Digital (NISN, NPSN, Mapel, Kode Tes)
+    const idBlocks = blocks
+      .filter((b: TemplateBlock) => identityTypes.includes(b.type) && b.type !== 'handwritten_identity')
+      .sort((a: TemplateBlock, b: TemplateBlock) => identityTypes.indexOf(a.type) - identityTypes.indexOf(b.type));
+
+    if (idBlocks.length > 0) {
+      const idRows = partitionBlocksIntoRows(idBlocks, USABLE_WIDTH, 12);
+      for (const row of idRows) {
+        positionRowFluidly(row, currentY, LEFT_BOUND, USABLE_WIDTH, 12, 40);
+        const rowMaxH = Math.max(...row.map(b => getBlockDimensions(b).height));
+        currentY += rowMaxH + GAP_Y;
+      }
+      separatorY.value = currentY - (GAP_Y / 2);
+      currentY += 10;
+    } else {
+      separatorY.value = 0;
+    }
+
+    // 3. Blok Soal / Keterangan
+    const questionBlocks = blocks.filter((b: TemplateBlock) => !identityTypes.includes(b.type));
+    if (questionBlocks.length > 0) {
+      const qRows = partitionBlocksIntoRows(questionBlocks, USABLE_WIDTH, MIN_NATURAL_GAP);
+      let testTotalHeight = currentY;
+      for (const row of qRows) {
+        testTotalHeight += Math.max(...row.map(b => getBlockDimensions(b).height)) + GAP_Y;
       }
 
-      const idBlocks = blocks
-          .filter((b: TemplateBlock) => identityTypes.includes(b.type) && b.type !== 'handwritten_identity')
-          .sort((a: TemplateBlock, b: TemplateBlock) => identityTypes.indexOf(a.type) - identityTypes.indexOf(b.type));
+      const hasTallBlock = questionBlocks.some(b => getBlockDimensions(b).height > 400);
+      if ((testTotalHeight > MAX_Y_LIMIT || hasTallBlock) && questionBlocks.length >= 3) {
+        // Alokasikan ke dalam 3 kolom seimbang vertikal
+        const colsCount = 3;
+        const colBlocks: TemplateBlock[][] = [[], [], []];
+        const colHeights = [0, 0, 0];
 
-      let currentHeaderX = MARGIN_LEFT;
-      let currentRowMaxHeight = 0;
+        // Pisahkan blok tinggi terlebih dahulu ke kolom ke-3
+        questionBlocks.forEach(b => {
+          const h = getBlockDimensions(b).height;
+          if (h > 400) {
+            colBlocks[2].push(b);
+            colHeights[2] += h + 20;
+          }
+        });
 
-      idBlocks.forEach((block: TemplateBlock) => {
-          const dims = getBlockDimensions(block);
+        // Masukkan sisa blok ke kolom dengan tinggi tersedikit
+        questionBlocks.forEach(b => {
+          const h = getBlockDimensions(b).height;
+          if (h <= 400) {
+            let minColIdx = 0;
+            if (colHeights[1] < colHeights[minColIdx]) minColIdx = 1;
+            if (colHeights[2] < colHeights[minColIdx] && colHeights[2] + h < MAX_Y_LIMIT - currentY) minColIdx = 2;
+            colBlocks[minColIdx].push(b);
+            colHeights[minColIdx] += h + 20;
+          }
+        });
+
+        const colWidths = colBlocks.map(col => {
+          if (col.length === 0) return 180;
+          return Math.max(...col.map(b => getBlockDimensions(b).width));
+        });
+        const totalColsW = colWidths.reduce((a, b) => a + b, 0);
+        const freeW = USABLE_WIDTH - totalColsW;
+        const gutter = Math.max(16, freeW / 2);
+
+        let curColX = LEFT_BOUND + Math.max(0, (USABLE_WIDTH - (totalColsW + gutter * 2)) / 2);
+        for (let c = 0; c < colsCount; c++) {
+          let curBlockY = currentY;
+          for (const b of colBlocks[c]) {
+            b.x = Math.round(curColX);
+            b.y = Math.round(curBlockY);
+            curBlockY += getBlockDimensions(b).height + 20;
+          }
+          curColX += colWidths[c] + gutter;
+        }
+      } else {
+        for (const row of qRows) {
+          positionRowFluidly(row, currentY, LEFT_BOUND, USABLE_WIDTH, MIN_NATURAL_GAP, MAX_NATURAL_GAP);
+          const rowMaxH = Math.max(...row.map(b => getBlockDimensions(b).height));
           
-          if (currentHeaderX + dims.width > MAX_HEADER_X && currentHeaderX > MARGIN_LEFT) {
-              currentHeaderX = MARGIN_LEFT;
-              currentY += currentRowMaxHeight + GAP_Y;
-              currentRowMaxHeight = 0;
+          if (currentY + rowMaxH > MAX_Y_LIMIT && !warningShown) {
+            omrStore.showToast('Peringatan: Area soal mendekati/melebihi batas bawah kertas A4.', 'warning');
+            warningShown = true;
           }
+          
+          currentY += rowMaxH + GAP_Y;
+        }
+      }
+    }
 
-          block.x = currentHeaderX;
-          block.y = currentY;
-          currentHeaderX += dims.width + GAP_X_ID;
-          currentRowMaxHeight = Math.max(currentRowMaxHeight, dims.height);
-      });
-
-      if (idBlocks.length > 0) currentY += currentRowMaxHeight + 20;
-
-      separatorY.value = currentY;
-      currentY += 30; 
-      
-      const questionBlocks = blocks.filter((b: TemplateBlock) => !identityTypes.includes(b.type));
-      
-      let currentSoalX = MARGIN_LEFT;
-      let currentSoalY = currentY;
-      let currentRowMaxHeightSoal = 0;
-
-      questionBlocks.forEach((block: TemplateBlock) => {
-          const dims = getBlockDimensions(block);
-
-          if (currentSoalX > MARGIN_LEFT && (currentSoalX + dims.width > MAX_HEADER_X)) {
-              currentSoalX = MARGIN_LEFT;
-              currentSoalY += currentRowMaxHeightSoal + GAP_Y;
-              currentRowMaxHeightSoal = 0; 
-          }
-
-          block.x = currentSoalX;
-          block.y = currentSoalY;
-
-          currentSoalX += dims.width + GAP_X_SOAL;
-          currentRowMaxHeightSoal = Math.max(currentRowMaxHeightSoal, dims.height);
-
-          if (currentSoalY + dims.height > MAX_Y_LIMIT && !warningShown) {
-              omrStore.showToast('Peringatan: Area soal mendekati/melebihi batas bawah kertas A4.', 'warning');
-              warningShown = true;
-          }
-      });
+    // 4. Perbarui koordinat ROI bulatan (bubbles)
+    blocks.forEach((b: TemplateBlock) => {
+      b.bubbles = omrStore.computeBlockBubbles(b);
+    });
 
   } catch (error: any) {
-      omrStore.showToast(`Kesalahan Modul Auto-Layout: ${error.message}`, 'error');
+    omrStore.showToast(`Kesalahan Modul Penataan Otomatis: ${error.message}`, 'error');
   }
 };
 

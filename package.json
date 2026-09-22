@@ -1,19 +1,23 @@
 {
-  "name": "dejamu",
+  "name": "dejawab",
   "private": true,
   "version": "1.0.2",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 3000",
     "build": "vue-tsc && vite build",
+    "start": "node server.ts",
     "release": "npm version patch --no-git-tag-version && npm run build && git add . && git commit -m \"Auto-build and version bump\" && git push",
     "deploy": "vercel --prod",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@google/genai": "^2.23.0",
     "@mdi/font": "^7.4.47",
+    "@types/express": "^5.0.6",
     "chart.js": "^4.5.1",
     "dexie": "^4.0.8",
+    "express": "^5.2.1",
     "file-saver": "^2.0.5",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",

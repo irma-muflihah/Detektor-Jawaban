@@ -1,6 +1,6 @@
-# DEJAMU - Detektor Jawaban Murid
+# DEJAWAB - Detektor Jawaban
 
-DEJAMU (Detektor Jawaban Murid) adalah aplikasi web modern untuk merancang (generate) dan memindai Lembar Jawab Komputer (LJK) menggunakan teknologi AI (OpenCV) di browser. 
+DEJAWAB (Detektor Jawaban) adalah aplikasi web modern untuk merancang (generate) dan memindai Lembar Jawab Komputer (LJK) menggunakan teknologi AI di browser. 
 Aplikasi ini dibangun dengan framework **Vue 3**, **Vuetify 3**, dan **Dexie.js** untuk penyimpanan lokal yang persisten.
 
 ## Fitur Utama

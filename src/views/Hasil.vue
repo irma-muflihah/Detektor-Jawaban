@@ -94,6 +94,17 @@
         <template v-slot:item.scannedAt="{ item }">
           <span class="text-caption text-grey-darken-1">{{ new Date(item.scannedAt).toLocaleString('id-ID') }}</span>
         </template>
+        <template v-slot:item.engine="{ item }">
+          <v-chip
+            size="x-small"
+            :color="item.engine === 'gemini' ? 'primary' : 'grey-darken-1'"
+            class="font-weight-bold"
+            variant="tonal"
+          >
+            <v-icon start size="12" v-if="item.engine === 'gemini'">mdi-creation</v-icon>
+            {{ item.engine === 'gemini' ? 'Gemini AI' : 'OpenCV' }}
+          </v-chip>
+        </template>
         <template v-slot:item.id_mapel="{ item }">
           <span class="font-weight-bold text-primary">{{ item.id_mapel }}</span>
         </template>
@@ -102,6 +113,9 @@
         </template>
         <template v-slot:item.nisn="{ item }">
           <span class="font-weight-bold">{{ item.nisn }}</span>
+        </template>
+        <template v-slot:item.nama_siswa="{ item }">
+          <span class="text-caption font-weight-medium text-grey-darken-3">{{ item.nama_siswa || '-' }}</span>
         </template>
         
         <!-- Dinamis kolom jawaban -->
@@ -233,6 +247,8 @@ const uniqueCombos = computed(() => new Set(scanHistoryList.value.map(s => `${s.
 const tableHeaders = computed(() => {
   const headers = [
     { title: 'Waktu Pindai', key: 'scannedAt', sortable: true },
+    { title: 'Metode', key: 'engine', sortable: true },
+    { title: 'Nama Siswa', key: 'nama_siswa', sortable: true },
     { title: 'NPSN', key: 'npsn', sortable: true },
     { title: 'ID Mapel', key: 'id_mapel', sortable: true },
     { title: 'Kode Tes', key: 'kode_tes', sortable: true },
@@ -279,7 +295,9 @@ const filteredList = computed(() => {
   return scanHistoryList.value.filter(item => 
     item.npsn.toLowerCase().includes(s) ||
     item.id_mapel.toLowerCase().includes(s) ||
-    item.nisn.toLowerCase().includes(s)
+    item.nisn.toLowerCase().includes(s) ||
+    (item.nama_siswa && item.nama_siswa.toLowerCase().includes(s)) ||
+    (item.engine && item.engine.toLowerCase().includes(s))
   );
 });
 

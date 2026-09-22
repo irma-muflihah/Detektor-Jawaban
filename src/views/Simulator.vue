@@ -101,7 +101,7 @@
         </v-col>
       </v-row>
 
-      <div class="d-flex gap-3">
+      <div class="d-flex flex-wrap gap-3 align-center mb-2">
         <v-btn 
           color="primary" 
           class="text-none font-weight-bold rounded-lg" 
@@ -114,6 +114,17 @@
         </v-btn>
         
         <v-btn 
+          variant="tonal"
+          color="grey-darken-3"
+          class="text-none font-weight-bold rounded-lg"
+          prepend-icon="mdi-refresh"
+          :disabled="!selectedTemplateId || isGenerating"
+          @click="shufflePreview"
+        >
+          Acak Lembar Uji
+        </v-btn>
+
+        <v-btn 
           v-if="!selectedTemplateId"
           color="secondary" 
           variant="tonal"
@@ -123,6 +134,43 @@
           Buat Templat Baru
         </v-btn>
       </div>
+
+      <!-- Progress bar saat simulasi berjalan -->
+      <div v-if="isGenerating" class="mt-4 pa-4 rounded-lg bg-blue-lighten-5 border border-blue-lighten-3">
+        <div class="d-flex justify-space-between align-center mb-2">
+          <div class="d-flex align-center gap-2">
+            <v-progress-circular indeterminate color="primary" size="20" width="2"></v-progress-circular>
+            <span class="text-caption font-weight-bold text-grey-darken-3">{{ progressText }}</span>
+          </div>
+          <span class="text-caption font-weight-bold text-primary">{{ progressPercent }}%</span>
+        </div>
+        <v-progress-linear :model-value="progressPercent" color="primary" height="8" rounded striped></v-progress-linear>
+      </div>
+    </div>
+
+    <!-- Live Preview Card -->
+    <div v-if="selectedTemplate" class="bg-white rounded-xl border pa-6 shadow-sm mx-auto" style="max-width: 900px; width: 100%;">
+      <div class="d-flex flex-wrap align-center justify-space-between gap-3 mb-4">
+        <div class="d-flex align-center gap-2">
+          <v-icon color="primary">mdi-eye-outline</v-icon>
+          <h3 class="text-subtitle-1 font-weight-bold text-grey-darken-3 mb-0">Pratinjau Lembar Simulasi</h3>
+        </div>
+        <div class="d-flex align-center gap-2">
+          <v-btn-toggle v-model="previewMode" mandatory density="compact" variant="outlined" color="primary" class="rounded-lg">
+            <v-btn value="student" class="text-none text-caption">Siswa</v-btn>
+            <v-btn value="key" class="text-none text-caption">Kunci Jawaban</v-btn>
+          </v-btn-toggle>
+          <v-btn size="small" variant="text" icon="mdi-dice-5-outline" color="grey-darken-2" title="Acak Jawaban Siswa" @click="shufflePreview"></v-btn>
+        </div>
+      </div>
+
+      <div class="border rounded-lg bg-grey-lighten-4 pa-4 d-flex justify-center overflow-x-auto">
+        <div 
+          class="bg-white rounded border shadow-sm" 
+          style="max-width: 650px; width: 100%;"
+          v-html="previewSvg"
+        ></div>
+      </div>
     </div>
 
     <!-- Hidden Container for SVG rendering -->
@@ -131,16 +179,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { useOmrStore } from '../store/omrStore';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
-import type { OmrTemplate } from '../db/database';
+import type { OmrTemplate, TemplateBlock } from '../db/database';
 
 const omrStore = useOmrStore();
 const selectedTemplateId = ref<string>('');
 const svgContainer = ref<HTMLElement | null>(null);
 const isGenerating = ref(false);
+const progressText = ref('Mempersiapkan data...');
+const progressPercent = ref(0);
+const previewMode = ref<'student' | 'key'>('student');
+const previewSvg = ref<string>('');
 
 const config = ref({
   count: 32,
@@ -1052,19 +1104,76 @@ const banyumasNames = [
   "Cinta Handayani"
 ];
 
-onMounted(async () => {
-  await omrStore.loadTemplatesFromDB();
-  if (omrStore.savedTemplates.length > 0) {
-    selectedTemplateId.value = omrStore.savedTemplates[0].id!;
+const selectedTemplate = computed(() => {
+  if (selectedTemplateId.value) {
+    const found = omrStore.savedTemplates.find(t => t.id === selectedTemplateId.value);
+    if (found) return found;
+    if (omrStore.activeTemplate?.id === selectedTemplateId.value) return omrStore.activeTemplate;
   }
+  return omrStore.savedTemplates[0] || omrStore.activeTemplate;
 });
 
+const escapeXml = (unsafe: any): string => {
+  if (unsafe === null || unsafe === undefined) return '';
+  return String(unsafe)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+};
+
+const renderCustomTextSvg = (block: any): string => {
+  const w = block.cols || 150;
+  const h = block.rows || 100;
+  const rawText = block.prefillValue || 'Teks kosong';
+  
+  // Word wrapping inside SVG without using foreignObject (prevents canvas tainting)
+  const maxCharsPerLine = Math.max(10, Math.floor((w - 24) / 7.2));
+  const paragraphs = String(rawText).split('\n');
+  const lines: string[] = [];
+  
+  for (const para of paragraphs) {
+    if (!para.trim()) {
+      lines.push('');
+      continue;
+    }
+    const words = para.split(' ');
+    let currentLine = '';
+    for (const word of words) {
+      if ((currentLine + (currentLine ? ' ' : '') + word).length <= maxCharsPerLine) {
+        currentLine += (currentLine ? ' ' : '') + word;
+      } else {
+        if (currentLine) lines.push(currentLine);
+        currentLine = word;
+      }
+    }
+    if (currentLine) lines.push(currentLine);
+  }
+
+  const maxLines = Math.max(1, Math.floor((h - 20) / 16));
+  const displayLines = lines.slice(0, maxLines);
+  
+  const tspans = displayLines.map((line, idx) => 
+    `<tspan x="12" y="${22 + idx * 16}">${escapeXml(line)}</tspan>`
+  ).join('');
+
+  return `
+    <rect width="${w}" height="${h}" fill="none" stroke="#475569" stroke-width="2" />
+    <rect x="0" y="-19" width="7" height="7" fill="#0f172a" rx="1.5" />
+    <text x="12" y="-13" font-size="11" font-weight="bold" fill="#334155" font-family="Inter, sans-serif">${escapeXml(block.title)}</text>
+    <text font-size="12" font-family="Inter, sans-serif" fill="#0f172a">
+      ${tspans}
+    </text>
+  `;
+};
+
 const generateRandomNISN = () => {
-  return Math.floor(1000000000 + Math.random() * 9000000000).toString(); // 10 digits
+  return Math.floor(1000000000 + Math.random() * 9000000000).toString();
 };
 
 const generateScribble = (cx: number, cy: number, r: number, type: 'circle' | 'rect', isIdeal: boolean = false) => {
-  const color = '#2b2b36'; // Pencil-like dark gray/black
+  const color = '#2b2b36';
   let paths = '';
   
   if (isIdeal) {
@@ -1076,14 +1185,13 @@ const generateScribble = (cx: number, cy: number, r: number, type: 'circle' | 'r
     return paths;
   }
 
-  // Draw an almost complete fill to guarantee OMR detection
+  // Draw natural pencil fill
   if (type === 'circle') {
      paths += `<circle cx="${cx + (Math.random()*2-1)}" cy="${cy + (Math.random()*2-1)}" r="${r * 0.85}" fill="${color}" opacity="0.95" />`;
   } else {
      paths += `<rect x="${cx - r * 0.85 + (Math.random()*2-1)}" y="${cy - r * 0.85 + (Math.random()*2-1)}" width="${r * 1.7}" height="${r * 1.7}" rx="2" fill="${color}" opacity="0.95" />`;
   }
   
-  // Add some pencil stroke artifacts for natural look
   for (let i=0; i<3; i++) {
     const x1 = cx - r + Math.random() * r * 2;
     const y1 = cy - r + Math.random() * r * 2;
@@ -1094,8 +1202,143 @@ const generateScribble = (cx: number, cy: number, r: number, type: 'circle' | 'r
   return paths;
 };
 
-const buildSvgString = (template: OmrTemplate, simData: any) => {
+const isIdentityOrTextBlock = (type: string, direction?: string): boolean => {
+  if (direction === 'teks' || direction === 'handwritten') return true;
+  return [
+    'handwritten_identity',
+    'identity_nisn',
+    'identity_npsn',
+    'identity_subject',
+    'identity_test',
+    'teks_kustom'
+  ].includes(type);
+};
+
+const getSafeOptions = (block: TemplateBlock): string[] => {
+  if (block.options && block.options.length > 0) {
+    return block.options;
+  }
+  if (block.type === 'bs' || block.type === 'bs3') {
+    return ['B', 'S'];
+  }
+  if (block.type === 'sts') {
+    return ['S', 'TS'];
+  }
+  if (block.type === 'skala') {
+    return ['1', '2', '3', '4', '5'];
+  }
+  return ['A', 'B', 'C', 'D'];
+};
+
+const generateAnswerKey = (template: OmrTemplate): Record<string | number, any> => {
+  const answerKey: Record<string | number, any> = {};
+  template.blocks.forEach(block => {
+    if (!isIdentityOrTextBlock(block.type, block.direction)) {
+      answerKey[block.id] = [];
+      const rows = block.rows || 1;
+      const opts = getSafeOptions(block);
+
+      if (block.type === 'jodoh') {
+        const shuffledOpts = [...opts].sort(() => 0.5 - Math.random());
+        for (let r = 0; r < rows; r++) {
+          answerKey[block.id].push([shuffledOpts[r % shuffledOpts.length]]);
+        }
+      } else {
+        for (let r = 0; r < rows; r++) {
+          if (block.type === 'kompleks') {
+            const numAns = Math.min(opts.length, Math.floor(Math.random() * 2) + 1);
+            const shuffledOpts = [...opts].sort(() => 0.5 - Math.random());
+            answerKey[block.id].push(shuffledOpts.slice(0, numAns));
+          } else if (block.type === 'bs3') {
+            const ansArray = [
+              opts[Math.floor(Math.random() * opts.length)],
+              opts[Math.floor(Math.random() * opts.length)],
+              opts[Math.floor(Math.random() * opts.length)]
+            ];
+            answerKey[block.id].push(ansArray);
+          } else {
+            const randomOpt = opts[Math.floor(Math.random() * opts.length)];
+            answerKey[block.id].push([randomOpt]);
+          }
+        }
+      }
+    }
+  });
+  return answerKey;
+};
+
+const generateStudentAnswers = (template: OmrTemplate, answerKey: Record<string | number, any>): Record<string | number, any> => {
+  const studentAnswers: Record<string | number, any> = {};
+  template.blocks.forEach(block => {
+    if (!isIdentityOrTextBlock(block.type, block.direction)) {
+      studentAnswers[block.id] = [];
+      const rows = block.rows || 1;
+      const opts = getSafeOptions(block);
+      const keyBlockAns = answerKey[block.id] || [];
+
+      if (block.type === 'jodoh') {
+        const rowCorrectness = Array.from({ length: rows }, () => Math.random() < 0.8);
+        const studentChoices = new Array(rows);
+        let remainingOpts = [...opts];
+
+        for (let r = 0; r < rows; r++) {
+          if (rowCorrectness[r] && keyBlockAns[r]) {
+            studentChoices[r] = keyBlockAns[r][0];
+            remainingOpts = remainingOpts.filter(o => o !== studentChoices[r]);
+          }
+        }
+
+        remainingOpts = remainingOpts.sort(() => 0.5 - Math.random());
+        let remainIdx = 0;
+
+        for (let r = 0; r < rows; r++) {
+          if (!rowCorrectness[r] || !studentChoices[r]) {
+            studentChoices[r] = remainingOpts.length > 0 
+              ? remainingOpts[remainIdx % remainingOpts.length] 
+              : opts[Math.floor(Math.random() * opts.length)];
+            remainIdx++;
+          }
+          studentAnswers[block.id].push([studentChoices[r] || opts[0]]);
+        }
+      } else {
+        for (let r = 0; r < rows; r++) {
+          if (block.type === 'kompleks') {
+            if (Math.random() < 0.75 && keyBlockAns[r]) {
+              studentAnswers[block.id].push(keyBlockAns[r]);
+            } else {
+              const numAns = Math.min(opts.length, Math.floor(Math.random() * 2) + 1);
+              const shuffledOpts = [...opts].sort(() => 0.5 - Math.random());
+              studentAnswers[block.id].push(shuffledOpts.slice(0, numAns));
+            }
+          } else if (block.type === 'bs3') {
+            const studentAnsArray: string[] = [];
+            for (let sub = 0; sub < 3; sub++) {
+              if (Math.random() < 0.8 && keyBlockAns[r]?.[sub]) {
+                studentAnsArray.push(keyBlockAns[r][sub]);
+              } else {
+                const randomOpt = opts[Math.floor(Math.random() * opts.length)];
+                studentAnsArray.push(randomOpt);
+              }
+            }
+            studentAnswers[block.id].push(studentAnsArray);
+          } else {
+            if (Math.random() < 0.8 && keyBlockAns[r]?.[0]) {
+              studentAnswers[block.id].push(keyBlockAns[r]);
+            } else {
+              const randomOpt = opts[Math.floor(Math.random() * opts.length)];
+              studentAnswers[block.id].push([randomOpt]);
+            }
+          }
+        }
+      }
+    }
+  });
+  return studentAnswers;
+};
+
+const buildSvgString = (template: OmrTemplate, simData: any): string => {
   let blocksHtml = '';
+  const isKey = !!simData.isKey;
   
   template.blocks.forEach((block: any) => {
     let blockContent = '';
@@ -1104,19 +1347,19 @@ const buildSvgString = (template: OmrTemplate, simData: any) => {
     if (block.type === 'handwritten_identity') {
       blockContent = `
         <rect width="820" height="220" fill="none" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,4" />
-        <rect x="0" y="-20" width="8" height="8" fill="#0f172a" rx="1" />
-        <text x="12" y="-10" font-size="14" font-weight="bold" fill="#334155" font-family="Inter, sans-serif">${block.title}</text>
+        <rect x="0" y="-19" width="7" height="7" fill="#0f172a" rx="1.5" />
+        <text x="12" y="-13" font-size="11" font-weight="bold" fill="#334155" font-family="Inter, sans-serif">${escapeXml(block.title)}</text>
         <text x="15" y="25" font-size="12" font-weight="bold" font-family="Inter, sans-serif">Nama Lengkap:</text>
         <rect x="15" y="35" width="790" height="25" fill="none" stroke="#475569" stroke-width="1" />
-        <text x="20" y="52" font-size="16" font-family="Inter, sans-serif" fill="#0f172a">${simData.name}</text>
+        <text x="20" y="52" font-size="16" font-family="Inter, sans-serif" fill="#0f172a">${escapeXml(simData.name)}</text>
         
         <text x="15" y="80" font-size="12" font-weight="bold" font-family="Inter, sans-serif">Kelas:</text>
         <rect x="15" y="90" width="150" height="25" fill="none" stroke="#475569" stroke-width="1" />
-        <text x="20" y="107" font-size="16" font-family="Inter, sans-serif" fill="#0f172a">${config.value.className}</text>
+        <text x="20" y="107" font-size="16" font-family="Inter, sans-serif" fill="#0f172a">${escapeXml(config.value.className)}</text>
         
         <text x="180" y="80" font-size="12" font-weight="bold" font-family="Inter, sans-serif">No. Peserta:</text>
         <rect x="180" y="90" width="150" height="25" fill="none" stroke="#475569" stroke-width="1" />
-        <text x="185" y="107" font-size="16" font-family="Inter, sans-serif" fill="#0f172a">${simData.absen}</text>
+        <text x="185" y="107" font-size="16" font-family="Inter, sans-serif" fill="#0f172a">${escapeXml(simData.absen)}</text>
         
         <text x="345" y="80" font-size="12" font-weight="bold" font-family="Inter, sans-serif">Tanggal Pelaksanaan Tes:</text>
         <rect x="345" y="90" width="460" height="25" fill="none" stroke="#475569" stroke-width="1" />
@@ -1130,14 +1373,14 @@ const buildSvgString = (template: OmrTemplate, simData: any) => {
         <path d="M 595 188 Q 610 162 625 182 T 655 178 T 685 188 T 725 172 T 775 182" stroke="#0f172a" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.85" />
       `;
     } else if (block.direction === 'vertical') {
-      const cols = block.cols || 0;
+      const cols = block.cols || 1;
       const rows = block.rows || 10;
       
       let prefill = '';
       if (block.type === 'identity_nisn') prefill = simData.nisn;
       else if (block.type === 'identity_npsn') prefill = block.prefillValue || '20301942';
-      else if (block.type === 'identity_subject') prefill = config.value.mapel.padStart(cols, '0');
-      else if (block.type === 'identity_test') prefill = config.value.tes.padStart(cols, '0');
+      else if (block.type === 'identity_subject') prefill = (config.value.mapel || '01').padStart(cols, '0');
+      else if (block.type === 'identity_test') prefill = (config.value.tes || '01').padStart(cols, '0');
       else prefill = (block.prefillValue || '').toString();
 
       prefill = prefill.padEnd(cols, ' ');
@@ -1149,22 +1392,24 @@ const buildSvgString = (template: OmrTemplate, simData: any) => {
 
       let boxes = '';
       for(let c=1; c<=cols; c++) {
+        const char = prefill[c-1] !== ' ' ? prefill[c-1] : '';
         boxes += `<rect x="${(c-1)*32 + 9}" y="5" width="24" height="24" fill="none" stroke="#475569" stroke-width="1.5" />
-                  <text x="${(c-1)*32 + 21}" y="23" font-size="16" font-weight="bold" text-anchor="middle" font-family="Inter, sans-serif" fill="#0f172a">${prefill[c-1] !== ' ' ? prefill[c-1] : ''}</text>`;
+                  <text x="${(c-1)*32 + 21}" y="23" font-size="16" font-weight="bold" text-anchor="middle" font-family="Inter, sans-serif" fill="#0f172a">${escapeXml(char)}</text>`;
       }
 
       let circles = '';
+      const opts = block.options && block.options.length > 0 ? block.options : ['0','1','2','3','4','5','6','7','8','9'];
       for(let r=1; r<=rows; r++) {
         for(let c=1; c<=cols; c++) {
-          const optVal = block.options?.[r-1] || '';
+          const optVal = opts[r-1] || '';
           const isFilled = prefill[c-1] === optVal;
           
           circles += `<circle cx="${(c-1)*32 + 21}" cy="${r*28 + 20}" r="10" fill="none" stroke="#475569" stroke-width="1.5" />
-                      <text x="${(c-1)*32 + 21}" y="${r*28 + 24}" font-size="10" text-anchor="middle" font-family="Inter, sans-serif" fill="#475569">${optVal}</text>`;
+                      <text x="${(c-1)*32 + 21}" y="${r*28 + 24}" font-size="10" text-anchor="middle" font-family="Inter, sans-serif" fill="#475569">${escapeXml(optVal)}</text>`;
           
           if (isFilled) {
-             const isIdeal = ['identity_npsn', 'identity_subject', 'identity_test'].includes(block.type);
-             circles += generateScribble((c-1)*32 + 21, r*28 + 20, 10, 'circle', isIdeal);
+             const isIdealBubble = isKey || ['identity_npsn', 'identity_subject', 'identity_test'].includes(block.type);
+             circles += generateScribble((c-1)*32 + 21, r*28 + 20, 10, 'circle', isIdealBubble);
           }
         }
       }
@@ -1172,14 +1417,14 @@ const buildSvgString = (template: OmrTemplate, simData: any) => {
       blockContent = `
         ${bgCols}
         <rect width="${cols * 32 + 20}" height="${rows * 28 + 60}" fill="none" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,4" />
-        <rect x="0" y="-20" width="8" height="8" fill="#0f172a" rx="1" />
-        <text x="12" y="-10" font-size="14" font-weight="bold" fill="#334155" font-family="Inter, sans-serif">${block.title}</text>
+        <rect x="0" y="-19" width="7" height="7" fill="#0f172a" rx="1.5" />
+        <text x="12" y="-13" font-size="11" font-weight="bold" fill="#334155" font-family="Inter, sans-serif">${escapeXml(block.title)}</text>
         ${boxes}
         ${circles}
       `;
     } else if (block.direction === 'horizontal') {
       const rows = block.rows || 1;
-      const opts = block.options || [];
+      const opts = getSafeOptions(block);
       const totalRows = block.type === 'bs3' ? rows * 3 : rows;
       
       let bgRows = '';
@@ -1190,10 +1435,11 @@ const buildSvgString = (template: OmrTemplate, simData: any) => {
       let optionsHtml = '';
       for(let r=1; r<=totalRows; r++) {
         if (block.type !== 'bs3' || (r-1)%3 === 0) {
-          optionsHtml += `<text x="10" y="${(r-1)*30 + 25}" font-size="12" font-weight="bold" font-family="Inter, sans-serif">${(block.startNum||0) + (block.type === 'bs3' ? Math.floor((r-1)/3) : (r - 1))}.</text>`;
+          const num = (block.startNum || 1) + (block.type === 'bs3' ? Math.floor((r-1)/3) : (r - 1));
+          optionsHtml += `<text x="10" y="${(r-1)*30 + 25}" font-size="12" font-weight="bold" font-family="Inter, sans-serif">${num}.</text>`;
         }
         
-        let rowAns = [];
+        let rowAns: string[] = [];
         if (isAns && simData.answers[block.id]) {
           if (block.type === 'bs3') {
             const qIdx = Math.floor((r-1)/3);
@@ -1211,15 +1457,15 @@ const buildSvgString = (template: OmrTemplate, simData: any) => {
           const filled = rowAns && rowAns.includes(opt);
           if (block.type !== 'kompleks') {
             optionsHtml += `<circle cx="${oIdx*35 + 45}" cy="${(r-1)*30 + 20}" r="10" fill="none" stroke="#475569" stroke-width="1.5" />`;
-            optionsHtml += `<text x="${oIdx*35 + 45}" y="${(r-1)*30 + 24}" font-size="${opt.length > 1 ? 8 : 10}" text-anchor="middle" font-family="Inter, sans-serif" fill="#475569">${opt}</text>`;
+            optionsHtml += `<text x="${oIdx*35 + 45}" y="${(r-1)*30 + 24}" font-size="${opt.length > 1 ? 8 : 10}" text-anchor="middle" font-family="Inter, sans-serif" fill="#475569">${escapeXml(opt)}</text>`;
             if (filled) {
-              optionsHtml += generateScribble(oIdx*35 + 45, (r-1)*30 + 20, 10, 'circle');
+              optionsHtml += generateScribble(oIdx*35 + 45, (r-1)*30 + 20, 10, 'circle', isKey);
             }
           } else {
             optionsHtml += `<rect x="${oIdx*35 + 35}" y="${(r-1)*30 + 10}" width="20" height="20" rx="3" fill="none" stroke="#475569" stroke-width="1.5" />`;
-            optionsHtml += `<text x="${oIdx*35 + 45}" y="${(r-1)*30 + 24}" font-size="${opt.length > 1 ? 8 : 10}" text-anchor="middle" font-family="Inter, sans-serif" fill="#475569">${opt}</text>`;
+            optionsHtml += `<text x="${oIdx*35 + 45}" y="${(r-1)*30 + 24}" font-size="${opt.length > 1 ? 8 : 10}" text-anchor="middle" font-family="Inter, sans-serif" fill="#475569">${escapeXml(opt)}</text>`;
             if (filled) {
-              optionsHtml += generateScribble(oIdx*35 + 45, (r-1)*30 + 20, 10, 'rect');
+              optionsHtml += generateScribble(oIdx*35 + 45, (r-1)*30 + 20, 10, 'rect', isKey);
             }
           }
         }
@@ -1228,22 +1474,18 @@ const buildSvgString = (template: OmrTemplate, simData: any) => {
       blockContent = `
         ${bgRows}
         <rect width="${opts.length * 35 + 50}" height="${totalRows * 30 + 10}" fill="none" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,4" />
-        <rect x="0" y="-20" width="8" height="8" fill="#0f172a" rx="1" />
-        <text x="12" y="-10" font-size="14" font-weight="bold" fill="#334155" font-family="Inter, sans-serif">${block.title}</text>
+        <rect x="0" y="-19" width="7" height="7" fill="#0f172a" rx="1.5" />
+        <text x="12" y="-13" font-size="11" font-weight="bold" fill="#334155" font-family="Inter, sans-serif">${escapeXml(block.title)}</text>
         ${optionsHtml}
       `;
-    } else if (block.type === 'teks_kustom') {
+    } else if (block.type === 'teks_kustom' || block.direction === 'teks') {
+      blockContent = renderCustomTextSvg(block);
+    } else {
       const w = block.cols || 150;
-      const h = block.rows || 100;
-      const val = block.prefillValue || 'Teks kosong';
-      
+      const h = block.rows || 50;
       blockContent = `
-        <rect width="${w}" height="${h}" fill="none" stroke="#475569" stroke-width="2" />
-        <rect x="0" y="-20" width="8" height="8" fill="#0f172a" rx="1" />
-        <text x="12" y="-10" font-size="14" font-weight="bold" fill="#334155" font-family="Inter, sans-serif">${block.title}</text>
-        <foreignObject x="10" y="10" width="${w - 20}" height="${h - 20}">
-          <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: Inter, sans-serif; font-size: 14px; color: #0f172a; text-align: justify; word-wrap: break-word; line-height: 1.4; width: 100%; height: 100%; overflow: hidden; white-space: pre-wrap;">${val}</div>
-        </foreignObject>
+        <rect width="${w}" height="${h}" fill="none" stroke="#cbd5e1" stroke-width="1" stroke-dasharray="3,3" />
+        <text x="10" y="20" font-size="11" fill="#64748b" font-family="Inter, sans-serif">${escapeXml(block.title || 'Blok')}</text>
       `;
     }
 
@@ -1253,7 +1495,7 @@ const buildSvgString = (template: OmrTemplate, simData: any) => {
   return `
     <svg viewBox="0 0 1000 1414" width="1000" height="1414" xmlns="http://www.w3.org/2000/svg">
       <rect width="1000" height="1414" fill="#ffffff" />
-      <text x="500" y="95" font-size="28" font-weight="bold" text-anchor="middle" font-family="Inter, sans-serif" fill="#0f172a">${template.name}</text>
+      <text x="500" y="95" font-size="28" font-weight="bold" text-anchor="middle" font-family="Inter, sans-serif" fill="#0f172a">${escapeXml(template.name)}</text>
       
       <g id="fiducial-marks">
         <g fill="#0f172a">
@@ -1293,9 +1535,9 @@ const drawSvgToCtx = (svgStr: string, ctx: CanvasRenderingContext2D, dx: number,
       DOMURL.revokeObjectURL(url);
       resolve();
     };
-    img.onerror = (e) => {
+    img.onerror = () => {
       DOMURL.revokeObjectURL(url);
-      reject(e);
+      reject(new Error("Gagal merender lembar SVG ke kanvas gambar."));
     };
     img.src = url;
   });
@@ -1306,7 +1548,7 @@ const svgToImage = (svgStrings: string[], format: string = 'A4'): Promise<Blob> 
     try {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      if (!ctx) return reject(new Error('Canvas context null'));
+      if (!ctx) return reject(new Error('Konteks kanvas tidak tersedia'));
 
       if (format === 'F4') {
         canvas.width = 3300;
@@ -1335,7 +1577,7 @@ const svgToImage = (svgStrings: string[], format: string = 'A4'): Promise<Blob> 
 
       canvas.toBlob((blob) => {
         if (blob) resolve(blob);
-        else reject(new Error('Canvas to Blob failed'));
+        else reject(new Error('Gagal mengekspor kanvas ke format gambar JPEG'));
       }, 'image/jpeg', 0.95);
     } catch (err) {
       reject(err);
@@ -1343,164 +1585,162 @@ const svgToImage = (svgStrings: string[], format: string = 'A4'): Promise<Blob> 
   });
 };
 
+let previewSeed = ref(0);
+
+const updatePreview = () => {
+  const template = selectedTemplate.value;
+  if (!template || !template.blocks || template.blocks.length === 0) {
+    previewSvg.value = '<div class="pa-8 text-center text-grey">Pilih templat untuk melihat pratinjau.</div>';
+    return;
+  }
+
+  const answerKey = generateAnswerKey(template);
+
+  if (previewMode.value === 'key') {
+    previewSvg.value = buildSvgString(template, {
+      name: "KUNCI JAWABAN",
+      absen: "00",
+      nisn: "0000000000",
+      answers: answerKey,
+      isKey: true
+    });
+  } else {
+    const studentIndex = previewSeed.value % banyumasNames.length;
+    const studentAnswers = generateStudentAnswers(template, answerKey);
+    previewSvg.value = buildSvgString(template, {
+      name: banyumasNames[studentIndex],
+      absen: (studentIndex + 1).toString().padStart(2, '0'),
+      nisn: "20301942" + (studentIndex + 1).toString().padStart(2, '0'),
+      answers: studentAnswers,
+      isKey: false
+    });
+  }
+};
+
+const shufflePreview = () => {
+  previewSeed.value = Math.floor(Math.random() * banyumasNames.length);
+  updatePreview();
+};
+
 const generateSimulation = async () => {
-  const template = omrStore.savedTemplates.find(t => t.id === selectedTemplateId.value);
-  if (!template) return;
+  const template = selectedTemplate.value;
+  if (!template || !template.blocks || template.blocks.length === 0) {
+    omrStore.showToast("Pilih templat yang memiliki blok soal terlebih dahulu.", "warning");
+    return;
+  }
 
   const count = Math.max(2, Math.min(32, config.value.count));
   isGenerating.value = true;
+  progressPercent.value = 0;
+  progressText.value = 'Mempersiapkan data kunci jawaban dan siswa...';
   
   try {
     const zip = new JSZip();
     const imgFolder = zip.folder("Simulasi_LJK");
-    if(!imgFolder) throw new Error("Gagal membuat folder zip");
+    if (!imgFolder) throw new Error("Gagal membuat folder di dalam zip");
 
-    // LJK 1: Kunci Jawaban
-    // We generate answer key.
-    const answerKey: any = {};
-    template.blocks.forEach(block => {
-      if (!['handwritten_identity', 'identity_nisn', 'identity_npsn', 'identity_subject', 'identity_test'].includes(block.type)) {
-        answerKey[block.id] = [];
-        const rows = block.rows || 0;
-        const opts = block.options || [];
-        
-        if (block.type === 'jodoh') {
-          let shuffledOpts = [...opts].sort(() => 0.5 - Math.random());
-          for (let r=0; r<rows; r++) {
-            answerKey[block.id].push([shuffledOpts[r % shuffledOpts.length]]);
-          }
-        } else {
-          for (let r=0; r<rows; r++) {
-            if (block.type === 'kompleks') {
-              const numAns = Math.floor(Math.random() * 2) + 1; // 1 or 2 answers
-              const shuffledOpts = [...opts].sort(() => 0.5 - Math.random());
-              answerKey[block.id].push(shuffledOpts.slice(0, numAns));
-            } else if (block.type === 'bs3') {
-              const ansArray = [
-                opts[Math.floor(Math.random() * opts.length)],
-                opts[Math.floor(Math.random() * opts.length)],
-                opts[Math.floor(Math.random() * opts.length)]
-              ];
-              answerKey[block.id].push(ansArray);
-            } else {
-              const randomOpt = opts[Math.floor(Math.random() * opts.length)];
-              answerKey[block.id].push([randomOpt]);
-            }
-          }
-        }
-      }
-    });
-
+    const answerKey = generateAnswerKey(template);
     const svgStrings: string[] = [];
     const filenames: string[] = [];
 
-    // Sertakan LJK Kunci Jawaban
-    svgStrings.push(buildSvgString(template, { name: "KUNCI JAWABAN", absen: "00", nisn: "0000000000", answers: answerKey }));
+    // Lembar 1: Kunci Jawaban
+    svgStrings.push(buildSvgString(template, { 
+      name: "KUNCI JAWABAN", 
+      absen: "00", 
+      nisn: "0000000000", 
+      answers: answerKey, 
+      isKey: true 
+    }));
     filenames.push("00_KUNCI_JAWABAN.jpg");
 
-    for(let i=0; i<count; i++) {
+    // Lembar Siswa
+    const npsnBlock = template.blocks.find(b => b.type === 'identity_npsn');
+    const npsn = npsnBlock?.prefillValue || "20301942";
+    const safeMapel = (config.value.mapel || '01').padStart(2, '0');
+    const safeTes = (config.value.tes || '01').padStart(2, '0');
+
+    for (let i = 0; i < count; i++) {
       const name = banyumasNames[i % banyumasNames.length];
       const absen = (i + 1).toString().padStart(2, '0');
       const nisn = generateRandomNISN();
-      
-      const npsnBlock = template.blocks.find(b => b.type === 'identity_npsn');
-      const npsn = npsnBlock?.prefillValue || "20301942";
-      const filename = `${npsn}_${config.value.mapel.padStart(2, '0')}_${config.value.tes.padStart(2, '0')}_${nisn}.jpg`;
+      const filename = `${npsn}_${safeMapel}_${safeTes}_${nisn}.jpg`;
 
+      const studentAnswers = generateStudentAnswers(template, answerKey);
       const simData = {
         name,
         absen,
         nisn,
-        answers: {} as any
+        answers: studentAnswers,
+        isKey: false
       };
 
-      const studentAnswers: any = {};
-      template.blocks.forEach(block => {
-        if (!['handwritten_identity', 'identity_nisn', 'identity_npsn', 'identity_subject', 'identity_test'].includes(block.type)) {
-          studentAnswers[block.id] = [];
-          const rows = block.rows || 0;
-          const opts = block.options || [];
-          
-          if (block.type === 'jodoh') {
-            const rowCorrectness = Array.from({length: rows}, () => Math.random() < 0.8);
-            const studentChoices = new Array(rows);
-            let remainingOpts = [...opts];
-            
-            for (let r=0; r<rows; r++) {
-               if (rowCorrectness[r]) {
-                  studentChoices[r] = answerKey[block.id][r][0];
-                  remainingOpts = remainingOpts.filter(o => o !== studentChoices[r]);
-               }
-            }
-            
-            remainingOpts = remainingOpts.sort(() => 0.5 - Math.random());
-            let remainIdx = 0;
-            
-            for (let r=0; r<rows; r++) {
-               if (!rowCorrectness[r]) {
-                  studentChoices[r] = remainingOpts[remainIdx % remainingOpts.length];
-                  remainIdx++;
-               }
-               studentAnswers[block.id].push([studentChoices[r]]);
-            }
-          } else {
-            for(let r=0; r<rows; r++) {
-              if (block.type === 'kompleks') {
-                const numAns = Math.floor(Math.random() * 2) + 1; 
-                const shuffledOpts = [...opts].sort(() => 0.5 - Math.random());
-                studentAnswers[block.id].push(shuffledOpts.slice(0, numAns));
-              } else if (block.type === 'bs3') {
-                const studentAnsArray = [];
-                for (let sub=0; sub<3; sub++) {
-                  if (Math.random() < 0.8) {
-                    studentAnsArray.push(answerKey[block.id][r][sub]);
-                  } else {
-                    const randomOpt = opts[Math.floor(Math.random() * opts.length)];
-                    studentAnsArray.push(randomOpt);
-                  }
-                }
-                studentAnswers[block.id].push(studentAnsArray);
-              } else {
-                if (Math.random() < 0.8) {
-                  studentAnswers[block.id].push(answerKey[block.id][r]);
-                } else {
-                  const randomOpt = opts[Math.floor(Math.random() * opts.length)];
-                  studentAnswers[block.id].push([randomOpt]);
-                }
-              }
-            }
-          }
-        }
-      });
-      
-      simData.answers = studentAnswers;
       svgStrings.push(buildSvgString(template, simData));
       filenames.push(filename);
     }
     
+    const totalBatches = config.value.format === 'F4' ? Math.ceil(svgStrings.length / 2) : svgStrings.length;
+    let completedBatches = 0;
+
     if (config.value.format === 'F4') {
       for (let i = 0; i < svgStrings.length; i += 2) {
         const chunk = svgStrings.slice(i, i + 2);
         const chunkNames = filenames.slice(i, i + 2);
+        progressText.value = `Merender lembar F4 ${Math.floor(i / 2) + 1} dari ${totalBatches}...`;
+        progressPercent.value = Math.round((completedBatches / totalBatches) * 85);
+        
         const imgBlob = await svgToImage(chunk, 'F4');
-        const mergedName = chunkNames.length === 2 ? `${chunkNames[0].replace('.jpg', '')}_AND_${chunkNames[1]}` : chunkNames[0];
+        const mergedName = chunkNames.length === 2 
+          ? `${chunkNames[0].replace('.jpg', '')}_AND_${chunkNames[1]}` 
+          : chunkNames[0];
         imgFolder.file(mergedName, imgBlob);
+        completedBatches++;
       }
     } else {
       for (let i = 0; i < svgStrings.length; i++) {
+        progressText.value = `Merender lembar ${i + 1} dari ${totalBatches} (${filenames[i]})...`;
+        progressPercent.value = Math.round((completedBatches / totalBatches) * 85);
+        
         const imgBlob = await svgToImage([svgStrings[i]], 'A4');
         imgFolder.file(filenames[i], imgBlob);
+        completedBatches++;
       }
     }
 
+    progressText.value = 'Mengompresi ke file ZIP...';
+    progressPercent.value = 92;
     const content = await zip.generateAsync({ type: "blob" });
-    saveAs(content, `Simulasi_LJK_${config.value.mapel}_${config.value.tes}.zip`);
     
-    omrStore.showToast("Berhasil membuat file ZIP simulasi.", "success");
+    progressText.value = 'Mengunduh file simulasi...';
+    progressPercent.value = 100;
+    saveAs(content, `Simulasi_LJK_${safeMapel}_${safeTes}.zip`);
+    
+    omrStore.showToast("Berhasil membuat file ZIP simulasi dengan " + filenames.length + " lembar LJK.", "success");
   } catch (error: any) {
     omrStore.showToast(`Kesalahan simulasi: ${error.message}`, "error");
   } finally {
     isGenerating.value = false;
   }
 };
+
+onMounted(async () => {
+  await omrStore.loadTemplatesFromDB();
+  if (omrStore.activeTemplate?.id) {
+    selectedTemplateId.value = omrStore.activeTemplate.id;
+  } else if (omrStore.savedTemplates.length > 0) {
+    selectedTemplateId.value = omrStore.savedTemplates[0].id!;
+  }
+  updatePreview();
+});
+
+watch(selectedTemplateId, () => {
+  updatePreview();
+});
+
+watch(previewMode, () => {
+  updatePreview();
+});
+
+watch(() => config.value, () => {
+  updatePreview();
+}, { deep: true });
 </script>

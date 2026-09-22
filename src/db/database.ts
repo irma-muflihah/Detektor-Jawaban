@@ -39,6 +39,10 @@ export interface ScanResult {
   nisn: string;
   answers: any[];
   scannedAt: number;
+  nama_siswa?: string;
+  confidence_score?: number;
+  scan_notes?: string;
+  engine?: string;
 }
 
 export interface ScoreResult {

@@ -1,6 +1,6 @@
 {
-  "name": "DEJAMU",
-  "description": "Detektor Jawaban Murid",
+  "name": "Detektor Jawaban",
+  "description": "Detektor Jawaban (DEJAWAB) - Pembuat dan Pemindai Lembar Jawab Komputer (LJK) Berbasis AI",
   "requestFramePermissions": [
     "camera"
   ],

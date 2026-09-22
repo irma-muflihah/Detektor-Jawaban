@@ -8,7 +8,8 @@
               <v-icon size="24">mdi-camera-iris</v-icon>
             </div>
           </template>
-          <v-list-item-title class="font-weight-black text-white text-h6" style="letter-spacing: 2px;">DEJAMU</v-list-item-title>
+          <v-list-item-title class="font-weight-black text-white text-h6" style="letter-spacing: 2px;">DEJAWAB</v-list-item-title>
+          <v-list-item-subtitle class="text-caption text-grey-lighten-2">Detektor Jawaban</v-list-item-subtitle>
         </v-list-item>
       </v-list>
       <v-divider class="mb-2"></v-divider>
@@ -27,7 +28,10 @@
     </v-navigation-drawer>
 
     <v-app-bar color="surface" elevation="0" class="border-b">
-
+      <div class="d-flex align-center ml-4">
+        <span class="font-weight-bold text-subtitle-1 text-grey-darken-3">Detektor Jawaban</span>
+        <v-chip size="x-small" color="primary" class="ml-2 font-weight-bold" variant="flat">DEJAWAB</v-chip>
+      </div>
 
       <v-spacer></v-spacer>
       

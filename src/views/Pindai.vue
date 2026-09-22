@@ -74,86 +74,149 @@
         <v-stepper-window-item :value="2" class="h-100 pa-0">
           <div class="d-flex flex-column h-100">
             <v-card class="rounded-xl border bg-white flex-grow-1 pa-4 d-flex flex-column overflow-hidden" elevation="0">
-            <!-- Horizontal Mode Selection -->
-            <div class="d-flex align-center justify-space-between mb-4 flex-shrink-0">
-              <v-btn-toggle v-model="scanMode" color="primary" mandatory class="rounded-lg border bg-grey-lighten-4" density="default">
-                <v-btn value="camera" class="px-6 text-none font-weight-bold" prepend-icon="mdi-camera" height="48">
-                  Kamera
-                </v-btn>
-                <v-btn value="batch" class="px-6 text-none font-weight-bold" prepend-icon="mdi-folder-multiple-image" height="48">
-                  File (Batch)
-                </v-btn>
-              </v-btn-toggle>
-              <v-btn variant="tonal" rounded="pill" @click="step = 1" prepend-icon="mdi-arrow-left">Kembali</v-btn>
-            </div>
-
-            <!-- Main Scan Area -->
-            <div class="flex-grow-1 rounded-xl overflow-hidden d-flex flex-column border">
-              <!-- CAMERA VIEW -->
-              <div v-if="scanMode === 'camera'" class="flex-grow-1 position-relative bg-black d-flex align-center justify-center" :class="{ 'fullscreen-camera': cameraActive }">
-                <video ref="videoElement" class="w-100 h-100 object-fit-cover" playsinline autoplay muted></video>
-                
-                <div v-if="!cameraActive" class="position-absolute d-flex flex-column align-center">
-                  <v-icon size="64" color="white" class="mb-4 opacity-50">mdi-camera-off</v-icon>
-                  <v-btn color="primary" variant="flat" rounded="pill" @click="startCamera">
-                    Aktifkan Kamera
-                  </v-btn>
-                </div>
-
-                <div v-if="cameraActive" class="position-absolute top-0 left-0 w-100 h-100 pointer-events-none d-flex align-center justify-center">
-                  <div class="scanner-guide border-success border-opacity-50"></div>
-                </div>
-
-                <div v-if="cameraActive" class="position-absolute bottom-0 left-0 w-100 pa-4 bg-black bg-opacity-50 d-flex justify-space-between align-center">
-                  <v-btn color="white" variant="text" rounded="pill" prepend-icon="mdi-close" @click="stopCamera">
-                    Tutup
-                  </v-btn>
-                  
-                  <v-btn color="success" size="x-large" variant="flat" rounded="pill" prepend-icon="mdi-line-scan" class="px-8 font-weight-bold" :loading="isScanning" @click="captureAndScan">
-                    Pindai
-                  </v-btn>
-
-                  <v-badge :content="sessionLogs.length" color="primary" :model-value="sessionLogs.length > 0">
-                    <v-btn color="white" variant="tonal" rounded="pill" prepend-icon="mdi-format-list-bulleted" @click="goToStep3">
-                      Status
-                    </v-btn>
-                  </v-badge>
-                </div>
-              </div>
-
-              <!-- BATCH VIEW -->
-              <div v-else class="flex-grow-1 pa-6 d-flex flex-column bg-grey-lighten-4">
-                <div
-                  class="border-dashed border-2 rounded-xl d-flex flex-column align-center justify-center bg-white transition-all flex-grow-1 mb-4"
-                  :class="{ 'border-primary bg-blue-lighten-5': isDragging }"
-                  @dragover.prevent="isDragging = true"
-                  @dragleave.prevent="isDragging = false"
-                  @drop.prevent="handleDrop"
-                >
-                  <input type="file" ref="fileInput" class="d-none" multiple accept="image/*" @change="handleFileSelect">
-                  <v-icon size="48" :color="isDragging ? 'primary' : 'grey'" class="mb-2">mdi-cloud-upload</v-icon>
-                  <h3 class="text-subtitle-1 font-weight-bold text-grey-darken-2 mb-1">Tarik & Lepas File</h3>
-                  <p class="text-caption text-grey-darken-1 mb-4">JPG, PNG didukung</p>
-                  <v-btn color="primary" variant="tonal" rounded="pill" @click="triggerFileInput" prepend-icon="mdi-image-plus">
-                    Pilih File
-                  </v-btn>
-                </div>
-
-                <div class="bg-white rounded-xl border pa-4 d-flex align-center justify-space-between flex-shrink-0">
+              <!-- AI Scanner Engine Selector Banner -->
+              <div class="mb-3 pa-3 rounded-lg border d-flex flex-wrap align-center justify-space-between gap-3" :class="scanEngine === 'gemini' ? 'bg-blue-lighten-5 border-blue-lighten-3' : 'bg-grey-lighten-4 border-grey-lighten-2'">
+                <div class="d-flex align-center gap-3">
+                  <v-avatar :color="scanEngine === 'gemini' ? 'primary' : 'grey-darken-1'" size="36" class="text-white">
+                    <v-icon size="20">{{ scanEngine === 'gemini' ? 'mdi-creation' : 'mdi-camera-metering-matrix' }}</v-icon>
+                  </v-avatar>
                   <div>
-                    <span class="font-weight-bold text-subtitle-1">{{ batchFiles.length }}</span>
-                    <span class="text-caption text-grey-darken-1 ml-1">File siap</span>
+                    <div class="text-subtitle-2 font-weight-bold d-flex align-center gap-2">
+                      <span>Mesin Pemindaian:</span>
+                      <v-chip size="x-small" :color="scanEngine === 'gemini' ? 'primary' : 'grey-darken-2'" class="font-weight-bold">
+                        {{ scanEngine === 'gemini' ? '✨ Gemini AI Vision' : 'OpenCV Tradisional' }}
+                      </v-chip>
+                      <v-chip v-if="scanEngine === 'gemini'" size="x-small" color="success" variant="tonal" class="font-weight-bold">
+                        Presisi Tinggi
+                      </v-chip>
+                    </div>
+                    <div class="text-caption text-grey-darken-1">
+                      {{ scanEngine === 'gemini'
+                        ? 'Menganalisis bulatan LJK & identitas siswa dengan multimodal AI (tahan bayangan & kemiringan).'
+                        : 'Algoritma ambang batas piksel lokal (memerlukan LJK tegak lurus dan pencahayaan rata).' }}
+                    </div>
                   </div>
-                  <div class="d-flex gap-2">
-                    <v-btn color="error" variant="text" size="small" :disabled="batchFiles.length === 0" @click="batchFiles = []">Kosongkan</v-btn>
-                    <v-btn color="success" variant="flat" rounded="pill" prepend-icon="mdi-play" :loading="isScanning" :disabled="batchFiles.length === 0" @click="processBatchQueue">
-                      Proses
+                </div>
+
+                <div class="d-flex align-center flex-wrap gap-2">
+                  <v-btn-toggle v-model="scanEngine" mandatory density="compact" color="primary" rounded="lg" class="border bg-white">
+                    <v-btn value="gemini" class="text-none font-weight-bold" prepend-icon="mdi-creation">
+                      Gemini AI
                     </v-btn>
+                    <v-btn value="opencv" class="text-none" prepend-icon="mdi-camera-metering-matrix">
+                      OpenCV
+                    </v-btn>
+                  </v-btn-toggle>
+
+                  <v-switch
+                    v-if="scanEngine === 'gemini'"
+                    v-model="previewBeforeSave"
+                    label="Tinjau Hasil AI"
+                    color="primary"
+                    density="compact"
+                    hide-details
+                    class="ml-2"
+                  ></v-switch>
+                </div>
+              </div>
+
+              <!-- Horizontal Mode Selection (Kamera / Batch) -->
+              <div class="d-flex align-center justify-space-between mb-4 flex-shrink-0">
+                <v-btn-toggle v-model="scanMode" color="primary" mandatory class="rounded-lg border bg-grey-lighten-4" density="default">
+                  <v-btn value="camera" class="px-6 text-none font-weight-bold" prepend-icon="mdi-camera" height="48">
+                    Kamera
+                  </v-btn>
+                  <v-btn value="batch" class="px-6 text-none font-weight-bold" prepend-icon="mdi-folder-multiple-image" height="48">
+                    File (Batch)
+                  </v-btn>
+                </v-btn-toggle>
+                <v-btn variant="tonal" rounded="pill" @click="step = 1" prepend-icon="mdi-arrow-left">Kembali</v-btn>
+              </div>
+
+              <!-- Main Scan Area -->
+              <div class="flex-grow-1 rounded-xl overflow-hidden d-flex flex-column border">
+                <!-- CAMERA VIEW -->
+                <div v-if="scanMode === 'camera'" class="flex-grow-1 position-relative bg-black d-flex align-center justify-center" :class="{ 'fullscreen-camera': cameraActive }">
+                  <video ref="videoElement" class="w-100 h-100 object-fit-cover" playsinline autoplay muted></video>
+                  
+                  <div v-if="!cameraActive" class="position-absolute d-flex flex-column align-center">
+                    <v-icon size="64" color="white" class="mb-4 opacity-50">mdi-camera-off</v-icon>
+                    <v-btn color="primary" variant="flat" rounded="pill" @click="startCamera">
+                      Aktifkan Kamera
+                    </v-btn>
+                  </div>
+
+                  <div v-if="cameraActive" class="position-absolute top-0 left-0 w-100 h-100 pointer-events-none d-flex align-center justify-center">
+                    <div class="scanner-guide border-success border-opacity-50"></div>
+                  </div>
+
+                  <div v-if="cameraActive" class="position-absolute bottom-0 left-0 w-100 pa-4 bg-black bg-opacity-50 d-flex justify-space-between align-center">
+                    <v-btn color="white" variant="text" rounded="pill" prepend-icon="mdi-close" @click="stopCamera">
+                      Tutup
+                    </v-btn>
+                    
+                    <v-btn
+                      :color="scanEngine === 'gemini' ? 'primary' : 'success'"
+                      size="x-large"
+                      variant="flat"
+                      rounded="pill"
+                      :prepend-icon="scanEngine === 'gemini' ? 'mdi-creation' : 'mdi-line-scan'"
+                      class="px-8 font-weight-bold"
+                      :loading="isScanning"
+                      @click="captureAndScan"
+                    >
+                      {{ scanEngine === 'gemini' ? 'Pindai dengan Gemini AI' : 'Pindai OpenCV' }}
+                    </v-btn>
+
+                    <v-badge :content="sessionLogs.length" color="primary" :model-value="sessionLogs.length > 0">
+                      <v-btn color="white" variant="tonal" rounded="pill" prepend-icon="mdi-format-list-bulleted" @click="goToStep3">
+                        Status
+                      </v-btn>
+                    </v-badge>
+                  </div>
+                </div>
+
+                <!-- BATCH VIEW -->
+                <div v-else class="flex-grow-1 pa-6 d-flex flex-column bg-grey-lighten-4">
+                  <div
+                    class="border-dashed border-2 rounded-xl d-flex flex-column align-center justify-center bg-white transition-all flex-grow-1 mb-4"
+                    :class="{ 'border-primary bg-blue-lighten-5': isDragging }"
+                    @dragover.prevent="isDragging = true"
+                    @dragleave.prevent="isDragging = false"
+                    @drop.prevent="handleDrop"
+                  >
+                    <input type="file" ref="fileInput" class="d-none" multiple accept="image/*" @change="handleFileSelect">
+                    <v-icon size="48" :color="isDragging ? 'primary' : 'grey'" class="mb-2">mdi-cloud-upload</v-icon>
+                    <h3 class="text-subtitle-1 font-weight-bold text-grey-darken-2 mb-1">Tarik & Lepas File LJK</h3>
+                    <p class="text-caption text-grey-darken-1 mb-4">Mendukung format JPG, PNG, WEBP (bisa pilih sekaligus)</p>
+                    <v-btn color="primary" variant="tonal" rounded="pill" @click="triggerFileInput" prepend-icon="mdi-image-plus">
+                      Pilih File LJK
+                    </v-btn>
+                  </div>
+
+                  <div class="bg-white rounded-xl border pa-4 d-flex align-center justify-space-between flex-shrink-0">
+                    <div>
+                      <span class="font-weight-bold text-subtitle-1">{{ batchFiles.length }}</span>
+                      <span class="text-caption text-grey-darken-1 ml-1">File siap dipindai</span>
+                    </div>
+                    <div class="d-flex gap-2">
+                      <v-btn color="error" variant="text" size="small" :disabled="batchFiles.length === 0" @click="batchFiles = []">Kosongkan</v-btn>
+                      <v-btn
+                        :color="scanEngine === 'gemini' ? 'primary' : 'success'"
+                        variant="flat"
+                        rounded="pill"
+                        :prepend-icon="scanEngine === 'gemini' ? 'mdi-creation' : 'mdi-play'"
+                        :loading="isScanning"
+                        :disabled="batchFiles.length === 0"
+                        @click="processBatchQueue"
+                      >
+                        {{ scanEngine === 'gemini' ? 'Proses dengan Gemini AI' : 'Proses dengan OpenCV' }}
+                      </v-btn>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </v-card>
+            </v-card>
           </div>
         </v-stepper-window-item>
 
@@ -174,7 +237,8 @@
                 <thead>
                   <tr>
                     <th class="font-weight-bold" style="width: 60px;">Status</th>
-                    <th class="font-weight-bold" style="width: 120px;">Waktu</th>
+                    <th class="font-weight-bold" style="width: 110px;">Metode</th>
+                    <th class="font-weight-bold" style="width: 100px;">Waktu</th>
                     <th class="font-weight-bold" style="width: 250px;">Informasi</th>
                     <th class="font-weight-bold">Keterangan</th>
                   </tr>
@@ -186,12 +250,18 @@
                         {{ log.status === 'success' ? 'mdi-check-circle' : 'mdi-alert-circle' }}
                       </v-icon>
                     </td>
+                    <td>
+                      <v-chip size="x-small" :color="log.engine === 'gemini' ? 'primary' : 'grey-darken-1'" class="font-weight-bold" variant="tonal">
+                        <v-icon start size="12" v-if="log.engine === 'gemini'">mdi-creation</v-icon>
+                        {{ log.engine === 'gemini' ? 'Gemini AI' : 'OpenCV' }}
+                      </v-chip>
+                    </td>
                     <td class="text-caption text-grey-darken-1">{{ new Date(log.timestamp).toLocaleTimeString('id-ID') }}</td>
                     <td class="font-weight-medium text-truncate" style="max-width: 250px;" :title="log.info">{{ log.info }}</td>
                     <td :class="log.status === 'success' ? 'text-success' : 'text-error'">{{ log.message }}</td>
                   </tr>
                   <tr v-if="sessionLogs.length === 0">
-                    <td colspan="4" class="text-center pa-8 text-grey">
+                    <td colspan="5" class="text-center pa-8 text-grey">
                       <v-icon size="48" class="mb-2 opacity-50">mdi-clipboard-text-outline</v-icon>
                       <br>Belum ada proses pemindaian.
                     </td>
@@ -212,11 +282,144 @@
 
     <!-- Scanning Overlay -->
     <v-overlay :model-value="isScanning" class="align-center justify-center" persistent>
-      <v-card class="pa-6 rounded-xl text-center" min-width="250" elevation="0">
-        <v-progress-circular indeterminate color="primary" size="48" width="4" class="mb-4"></v-progress-circular>
-        <h3 class="text-subtitle-1 font-weight-bold">Memproses...</h3>
+      <v-card class="pa-6 rounded-xl text-center" min-width="280" elevation="6">
+        <v-progress-circular indeterminate color="primary" size="52" width="4" class="mb-4"></v-progress-circular>
+        <h3 class="text-subtitle-1 font-weight-bold mb-1">{{ scanStatusMessage }}</h3>
+        <p class="text-caption text-grey-darken-1">Mohon tunggu, proses ekstraksi data sedang berlangsung...</p>
       </v-card>
     </v-overlay>
+
+    <!-- Dialog Tinjau & Verifikasi Hasil Gemini AI -->
+    <v-dialog v-model="showAiPreviewDialog" max-width="720" persistent scrollable>
+      <v-card class="rounded-xl overflow-hidden">
+        <v-toolbar color="primary" density="comfortable" class="px-2">
+          <v-icon class="mr-2" size="24">mdi-creation</v-icon>
+          <v-toolbar-title class="text-subtitle-1 font-weight-bold">
+            Verifikasi Hasil Pemindaian (Gemini AI Vision)
+          </v-toolbar-title>
+          <v-spacer></v-spacer>
+          <v-btn icon="mdi-close" variant="text" size="small" @click="cancelAiResult"></v-btn>
+        </v-toolbar>
+
+        <v-card-text class="pa-4 bg-grey-lighten-5">
+          <div v-if="pendingAiResult" class="d-flex flex-column gap-3">
+            <!-- Header status & confidence -->
+            <div class="pa-3 rounded-lg bg-white border d-flex flex-wrap align-center justify-space-between gap-2">
+              <div class="d-flex align-center gap-2">
+                <v-icon :color="getConfidenceColor(pendingAiResult.confidence_score)" size="28">
+                  mdi-shield-check
+                </v-icon>
+                <div>
+                  <div class="text-caption text-grey-darken-1">Tingkat Keyakinan AI</div>
+                  <div class="text-subtitle-2 font-weight-bold" :class="getConfidenceTextColor(pendingAiResult.confidence_score)">
+                    {{ Math.round((pendingAiResult.confidence_score || 0.95) * 100) }}% - {{ getConfidenceLabel(pendingAiResult.confidence_score) }}
+                  </div>
+                </div>
+              </div>
+              <div class="text-caption text-grey-darken-2 font-italic">
+                "{{ pendingAiResult.scan_notes || 'Deteksi visual OMR berhasil' }}"
+              </div>
+            </div>
+
+            <!-- Identity Grid -->
+            <div class="bg-white rounded-lg border pa-3">
+              <div class="text-caption font-weight-bold text-grey-darken-2 mb-2 text-uppercase">
+                Identitas Siswa & Lembar Ujian
+              </div>
+              <v-row dense>
+                <v-col cols="12" sm="6">
+                  <v-text-field
+                    v-model="pendingAiResult.nisn"
+                    label="NISN (Nomor Induk Siswa)"
+                    variant="outlined"
+                    density="compact"
+                    prepend-inner-icon="mdi-card-account-details-outline"
+                    hide-details
+                  ></v-text-field>
+                </v-col>
+                <v-col cols="12" sm="6">
+                  <v-text-field
+                    v-model="pendingAiResult.npsn"
+                    label="NPSN (Sekolah)"
+                    variant="outlined"
+                    density="compact"
+                    prepend-inner-icon="mdi-school-outline"
+                    hide-details
+                  ></v-text-field>
+                </v-col>
+                <v-col cols="6" sm="3">
+                  <v-text-field
+                    v-model="pendingAiResult.id_mapel"
+                    label="ID Mapel"
+                    variant="outlined"
+                    density="compact"
+                    prepend-inner-icon="mdi-book-outline"
+                    hide-details
+                  ></v-text-field>
+                </v-col>
+                <v-col cols="6" sm="3">
+                  <v-text-field
+                    v-model="pendingAiResult.kode_tes"
+                    label="Kode Tes"
+                    variant="outlined"
+                    density="compact"
+                    prepend-inner-icon="mdi-clipboard-check-outline"
+                    hide-details
+                  ></v-text-field>
+                </v-col>
+                <v-col cols="12" sm="6">
+                  <v-text-field
+                    v-model="pendingAiResult.nama_siswa"
+                    label="Nama Siswa (Opsional)"
+                    variant="outlined"
+                    density="compact"
+                    placeholder="Terdeteksi dari tulisan tangan..."
+                    prepend-inner-icon="mdi-account-edit-outline"
+                    hide-details
+                  ></v-text-field>
+                </v-col>
+              </v-row>
+            </div>
+
+            <!-- Answers Grid -->
+            <div class="bg-white rounded-lg border pa-3">
+              <div class="d-flex align-center justify-space-between mb-2">
+                <span class="text-caption font-weight-bold text-grey-darken-2 text-uppercase">
+                  Jawaban Terdeteksi ({{ pendingAiResult.answers?.length || 0 }} Butir Soal)
+                </span>
+                <span class="text-caption text-grey">Periksa ketepatan deteksi jawaban siswa</span>
+              </div>
+
+              <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; max-height: 280px; overflow-y: auto;">
+                <div
+                  v-for="(ans, idx) in pendingAiResult.answers"
+                  :key="idx"
+                  class="pa-2 rounded border d-flex align-center justify-space-between bg-grey-lighten-5"
+                >
+                  <span class="text-caption font-weight-bold text-grey-darken-3">No. {{ ans.nomor_soal }}</span>
+                  <v-chip
+                    size="small"
+                    :color="ans.jawaban === '-' || (Array.isArray(ans.jawaban) && ans.jawaban.length === 0) ? 'grey-lighten-2' : 'primary'"
+                    class="font-weight-black"
+                  >
+                    {{ Array.isArray(ans.jawaban) ? (ans.jawaban.length ? ans.jawaban.join(', ') : '-') : (ans.jawaban || '-') }}
+                  </v-chip>
+                </div>
+              </div>
+            </div>
+          </div>
+        </v-card-text>
+
+        <v-card-actions class="pa-4 bg-white border-t d-flex justify-space-between align-center">
+          <v-btn variant="text" color="grey-darken-1" rounded="pill" @click="cancelAiResult" prepend-icon="mdi-close">
+            Batal / Pindai Ulang
+          </v-btn>
+          <v-btn color="primary" variant="flat" rounded="pill" class="px-6 font-weight-bold" prepend-icon="mdi-content-save-check" @click="confirmAndSaveAiResult">
+            Simpan ke Basis Data
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-container>
 </template>
 
@@ -224,6 +427,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useOmrStore } from '../store/omrStore';
 import { db, type ScanResult } from '../db/database';
+import { scanWithGemini, checkGeminiHealth, type GeminiOmrResultData } from '../services/geminiScanner';
 
 const omrStore = useOmrStore();
 
@@ -234,10 +438,17 @@ const scanMode = ref<'camera' | 'batch'>('camera');
 const cvReady = ref(false);
 
 const isScanning = ref(false);
+const scanStatusMessage = ref('Memproses...');
+const scanEngine = ref<'gemini' | 'opencv'>('gemini');
+const previewBeforeSave = ref(true);
+const showAiPreviewDialog = ref(false);
+const pendingAiResult = ref<GeminiOmrResultData | null>(null);
+const geminiStatus = ref<{ status: string; hasGeminiKey: boolean }>({ status: 'checking', hasGeminiKey: false });
 
 // Session State
 interface SessionLog {
   status: 'success' | 'error';
+  engine?: 'gemini' | 'opencv';
   info: string;
   message: string;
   timestamp: number;
@@ -246,6 +457,27 @@ const sessionLogs = ref<SessionLog[]>([]);
 
 const successfulScans = computed(() => sessionLogs.value.filter(l => l.status === 'success').length);
 const failedScans = computed(() => sessionLogs.value.filter(l => l.status === 'error').length);
+
+const getConfidenceColor = (score?: number) => {
+  const s = score ?? 0.9;
+  if (s >= 0.85) return 'success';
+  if (s >= 0.70) return 'warning';
+  return 'error';
+};
+
+const getConfidenceTextColor = (score?: number) => {
+  const s = score ?? 0.9;
+  if (s >= 0.85) return 'text-success';
+  if (s >= 0.70) return 'text-warning';
+  return 'text-error';
+};
+
+const getConfidenceLabel = (score?: number) => {
+  const s = score ?? 0.9;
+  if (s >= 0.90) return 'Sangat Tinggi (Akurat)';
+  if (s >= 0.75) return 'Cukup Baik';
+  return 'Perlu Ditinjau Manual';
+};
 
 // Camera Refs
 const videoElement = ref<HTMLVideoElement | null>(null);
@@ -289,6 +521,11 @@ const goToStep3 = () => {
 
 onMounted(async () => {
   await omrStore.loadTemplatesFromDB();
+
+  // Check Gemini status
+  checkGeminiHealth().then(status => {
+    geminiStatus.value = status;
+  });
   
   // Check OpenCV ready
   const checkCv = setInterval(() => {
@@ -343,6 +580,17 @@ const stopCamera = () => {
     videoElement.value.srcObject = null;
   }
   cameraActive.value = false;
+};
+
+const captureImageFromVideo = (): string => {
+  if (!videoElement.value) throw new Error("Kamera tidak aktif");
+  const canvas = document.createElement('canvas');
+  canvas.width = videoElement.value.videoWidth || 1280;
+  canvas.height = videoElement.value.videoHeight || 720;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error("Gagal menginisialisasi canvas");
+  ctx.drawImage(videoElement.value, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.92);
 };
 
 // Simulated AI Image Processing
@@ -542,25 +790,72 @@ const saveScanResult = async (result: any) => {
   await db.scanResults.put(scanData);
 };
 
-const addSessionLog = (status: 'success'|'error', info: string, message: string) => {
-  sessionLogs.value.unshift({ status, info, message, timestamp: Date.now() });
+const addSessionLog = (status: 'success'|'error', info: string, message: string, engine: 'gemini' | 'opencv' = 'gemini') => {
+  sessionLogs.value.unshift({ status, info, message, engine, timestamp: Date.now() });
 };
 
 const captureAndScan = async () => {
   if (!videoElement.value) return;
   
   isScanning.value = true;
+  scanStatusMessage.value = scanEngine.value === 'gemini'
+    ? 'Menganalisis LJK dengan Gemini AI Vision...'
+    : 'Memproses dengan OpenCV...';
+
   try {
-    const result = await processOMRImage(videoElement.value);
-    await saveScanResult(result);
-    addSessionLog('success', `NISN: ${result.nisn}`, 'Berhasil disimpan');
-    omrStore.showToast(`Berhasil dipindai! (NISN: ${result.nisn})`, 'success');
+    if (scanEngine.value === 'gemini') {
+      const dataUrl = captureImageFromVideo();
+      const res = await scanWithGemini(dataUrl, selectedTemplate.value);
+      if (!res.data) throw new Error(res.error || "Hasil pemindaian Gemini kosong.");
+
+      if (previewBeforeSave.value) {
+        pendingAiResult.value = res.data;
+        showAiPreviewDialog.value = true;
+      } else {
+        await saveScanResult({
+          ...res.data,
+          engine: 'gemini'
+        });
+        addSessionLog('success', `NISN: ${res.data.nisn}`, `Berhasil (Gemini AI)`, 'gemini');
+        omrStore.showToast(`Berhasil dipindai dengan Gemini AI! (NISN: ${res.data.nisn})`, 'success');
+      }
+    } else {
+      const result = await processOMRImage(videoElement.value);
+      await saveScanResult({
+        ...result,
+        engine: 'opencv'
+      });
+      addSessionLog('success', `NISN: ${result.nisn}`, 'Berhasil disimpan (OpenCV)', 'opencv');
+      omrStore.showToast(`Berhasil dipindai! (NISN: ${result.nisn})`, 'success');
+    }
   } catch (e: any) {
-    addSessionLog('error', 'Tangkapan Kamera', e.message);
+    addSessionLog('error', 'Tangkapan Kamera', e.message, scanEngine.value);
     omrStore.showToast(e.message, 'error');
   } finally {
     isScanning.value = false;
   }
+};
+
+const confirmAndSaveAiResult = async () => {
+  if (!pendingAiResult.value) return;
+  try {
+    await saveScanResult({
+      ...pendingAiResult.value,
+      engine: 'gemini'
+    });
+    addSessionLog('success', `NISN: ${pendingAiResult.value.nisn}`, 'Berhasil disimpan (Gemini AI)', 'gemini');
+    omrStore.showToast(`Data NISN ${pendingAiResult.value.nisn} berhasil disimpan!`, 'success');
+    showAiPreviewDialog.value = false;
+    pendingAiResult.value = null;
+  } catch (err: any) {
+    omrStore.showToast(`Gagal menyimpan: ${err.message}`, 'error');
+  }
+};
+
+const cancelAiResult = () => {
+  showAiPreviewDialog.value = false;
+  pendingAiResult.value = null;
+  omrStore.showToast('Pemindaian dibatalkan.', 'info');
 };
 
 // Batch Processing Logic
@@ -590,6 +885,18 @@ const addFilesToQueue = (files: File[]) => {
   });
 };
 
+const fileToDataUrl = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (e.target?.result) resolve(e.target.result as string);
+      else reject(new Error("Gagal membaca file gambar."));
+    };
+    reader.onerror = () => reject(new Error("Gagal membaca file."));
+    reader.readAsDataURL(file);
+  });
+};
+
 const loadImageFromFile = (file: File): Promise<HTMLImageElement> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -610,13 +917,29 @@ const processBatchQueue = async () => {
   
   for (let i = 0; i < batchFiles.value.length; i++) {
     const batchFile = batchFiles.value[i];
+    scanStatusMessage.value = `Memproses berkas ${i + 1} dari ${batchFiles.value.length} (${scanEngine.value === 'gemini' ? 'Gemini AI' : 'OpenCV'})...`;
+
     try {
-      const img = await loadImageFromFile(batchFile.file);
-      const result = await processOMRImage(img);
-      await saveScanResult(result);
-      addSessionLog('success', batchFile.file.name, `Berhasil (NISN: ${result.nisn})`);
+      if (scanEngine.value === 'gemini') {
+        const dataUrl = await fileToDataUrl(batchFile.file);
+        const res = await scanWithGemini(dataUrl, selectedTemplate.value);
+        if (!res.data) throw new Error(res.error || "Gagal memindai berkas.");
+        await saveScanResult({
+          ...res.data,
+          engine: 'gemini'
+        });
+        addSessionLog('success', batchFile.file.name, `Berhasil (NISN: ${res.data.nisn})`, 'gemini');
+      } else {
+        const img = await loadImageFromFile(batchFile.file);
+        const result = await processOMRImage(img);
+        await saveScanResult({
+          ...result,
+          engine: 'opencv'
+        });
+        addSessionLog('success', batchFile.file.name, `Berhasil (NISN: ${result.nisn})`, 'opencv');
+      }
     } catch (e: any) {
-      addSessionLog('error', batchFile.file.name, e.message);
+      addSessionLog('error', batchFile.file.name, e.message, scanEngine.value);
     }
   }
   
