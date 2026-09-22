@@ -2,8 +2,77 @@
   <div class="d-flex flex-column flex-md-row h-100 pa-2 pa-md-4 gap-4 designer-layout" style="gap: 1.5rem;">
     <!-- Sheet Configuration Panel -->
     <div class="d-flex flex-column gap-4 overflow-y-auto property-sidebar pr-md-2">
+      <!-- Pustaka Templat & Aksi Lembar -->
       <div class="bg-white rounded-xl border pa-5 shadow-sm">
-        <h3 class="font-weight-bold text-caption text-grey-darken-1 mb-4" style="text-transform: uppercase; letter-spacing: 0.05em;">Konfigurasi</h3>
+        <div class="d-flex justify-space-between align-center mb-3">
+          <h3 class="font-weight-bold text-caption text-grey-darken-1" style="text-transform: uppercase; letter-spacing: 0.05em;">Pustaka Templat</h3>
+          <v-chip size="x-small" color="primary" variant="tonal" class="font-weight-bold">{{ omrStore.savedTemplates.length }} Koleksi</v-chip>
+        </div>
+        
+        <v-select
+          v-model="selectedTemplateToLoad"
+          :items="omrStore.savedTemplates"
+          item-title="name"
+          item-value="id"
+          placeholder="Pilih dari koleksi..."
+          variant="outlined"
+          density="compact"
+          hide-details
+          class="mb-3 bg-white"
+        ></v-select>
+
+        <div class="d-flex gap-2 mb-3">
+          <v-btn 
+            color="primary" 
+            variant="flat" 
+            size="small" 
+            class="flex-grow-1 text-none font-weight-bold rounded-lg" 
+            prepend-icon="mdi-folder-open" 
+            :disabled="!selectedTemplateToLoad"
+            @click="loadSelectedTemplate"
+          >
+            Muat Templat
+          </v-btn>
+          <v-btn 
+            color="secondary" 
+            variant="tonal" 
+            size="small" 
+            class="flex-grow-1 text-none font-weight-bold rounded-lg" 
+            prepend-icon="mdi-file-plus-outline" 
+            @click="createBlankSheet"
+          >
+            Lembar Baru
+          </v-btn>
+        </div>
+
+        <v-btn 
+          v-if="hasQuestionBlocks" 
+          block 
+          color="warning" 
+          variant="tonal" 
+          size="small" 
+          class="text-none font-weight-bold rounded-lg mb-2" 
+          prepend-icon="mdi-eraser" 
+          @click="omrStore.clearQuestionBlocks"
+        >
+          Kosongkan Bagian Soal
+        </v-btn>
+
+        <v-btn 
+          block 
+          color="teal-darken-2" 
+          variant="tonal" 
+          size="small" 
+          class="text-none font-weight-bold rounded-lg" 
+          prepend-icon="mdi-code-json" 
+          @click="openJsonExportDialog"
+        >
+          Ekspor JSON (ROI Lengkap)
+        </v-btn>
+      </div>
+
+      <div class="bg-white rounded-xl border pa-5 shadow-sm">
+        <h3 class="font-weight-bold text-caption text-grey-darken-1 mb-4" style="text-transform: uppercase; letter-spacing: 0.05em;">Konfigurasi Lembar</h3>
         
         <v-text-field 
           v-model="omrStore.activeTemplate.name" 
@@ -51,7 +120,7 @@
         ></v-select>
 
         <v-btn block color="primary" class="text-none font-weight-bold mb-2 rounded-lg" prepend-icon="mdi-plus" @click="addBlock">
-          Tambah
+          Tambah Blok
         </v-btn>
         
         <v-btn block color="primary" variant="tonal" class="text-none font-weight-bold mb-2 rounded-lg border" prepend-icon="mdi-auto-fix" @click="autoLayoutBlocks(true)">
@@ -69,7 +138,11 @@
       </div>
 
       <div class="bg-white rounded-xl border pa-5 shadow-sm">
-        <h3 class="font-weight-bold text-caption text-grey-darken-1 mb-4" style="text-transform: uppercase; letter-spacing: 0.05em;">Hierarki</h3>
+        <div class="d-flex justify-space-between align-center mb-4">
+          <h3 class="font-weight-bold text-caption text-grey-darken-1" style="text-transform: uppercase; letter-spacing: 0.05em;">Hierarki Blok</h3>
+          <span class="text-caption text-grey">{{ omrStore.activeTemplate.blocks.length }} Blok</span>
+        </div>
+
         <v-expansion-panels variant="accordion" class="border rounded-lg bg-transparent">
           <v-expansion-panel v-for="(block, idx) in omrStore.activeTemplate.blocks" :key="block.id" elevation="0" class="bg-transparent border-b">
             <v-expansion-panel-title class="py-2 min-height-0 text-caption font-weight-bold">
@@ -99,7 +172,7 @@
                   <v-col cols="12" class="mt-2">
                     <v-textarea 
                       v-model="block.prefillValue" 
-                      label="Keterangan"
+                      label="Catatan / Keterangan"
                       class="bg-white"
                       density="compact" 
                       variant="outlined" 
@@ -119,22 +192,59 @@
                   <v-col cols="12" class="mt-2"><v-text-field v-model.number="block.rows" label="Jml Soal" type="number" density="compact" variant="outlined" hide-details class="bg-white"></v-text-field></v-col>
                 </template>
               </v-row>
-              <v-btn block color="error" variant="text" size="small" class="mt-3" prepend-icon="mdi-trash-can" @click="removeBlock(idx)">Hapus</v-btn>
+              <v-btn block color="error" variant="text" size="small" class="mt-3" prepend-icon="mdi-trash-can" @click="removeBlock(idx)">Hapus Blok</v-btn>
             </v-expansion-panel-text>
           </v-expansion-panel>
         </v-expansion-panels>
-        <v-btn block color="secondary" class="mt-6 font-weight-bold rounded-lg text-none" prepend-icon="mdi-content-save" @click="omrStore.saveTemplate">Simpan</v-btn>
+        <v-btn block color="secondary" class="mt-6 font-weight-bold rounded-lg text-none" prepend-icon="mdi-content-save" @click="omrStore.saveTemplate">Simpan Templat</v-btn>
+        <v-btn block color="primary" variant="flat" class="mt-2 font-weight-bold rounded-lg text-none" prepend-icon="mdi-download" @click="directDownloadJson">
+          Unduh Desain JSON (ROI Lengkap)
+        </v-btn>
       </div>
     </div>
     
     <!-- Canvas Area -->
-    <div class="canvas-wrapper flex-grow-1 d-flex justify-center overflow-auto bg-grey-lighten-2 rounded-xl border-lg pa-2 pa-md-6 pb-12 shadow-inner position-relative">
+    <div class="canvas-wrapper flex-grow-1 d-flex flex-column align-center overflow-auto bg-grey-lighten-2 rounded-xl border-lg pa-2 pa-md-6 pb-12 shadow-inner position-relative">
+      <!-- Quick Bar Di Atas Kanvas LJK -->
+      <div class="canvas-toolbar w-100 mb-3 d-flex justify-space-between align-center flex-wrap gap-2 bg-white pa-2 pa-sm-3 rounded-lg shadow-sm border" style="max-width: 1000px;">
+        <div class="d-flex align-center gap-2">
+          <v-chip size="small" color="primary" variant="tonal" class="font-weight-bold">
+            <v-icon start icon="mdi-file-document-outline"></v-icon>
+            A4 (1000 × 1414 px)
+          </v-chip>
+          <span class="text-caption text-grey font-weight-medium d-none d-sm-inline">{{ omrStore.activeTemplate.blocks.length }} Blok Terpasang</span>
+        </div>
+
+        <div class="d-flex align-center gap-2">
+          <v-btn
+            size="small"
+            color="teal-darken-1"
+            variant="tonal"
+            class="text-none font-weight-bold rounded-lg"
+            prepend-icon="mdi-code-json"
+            @click="openJsonExportDialog"
+          >
+            Pratinjau JSON ROI
+          </v-btn>
+          <v-btn
+            size="small"
+            color="primary"
+            variant="flat"
+            class="text-none font-weight-bold rounded-lg"
+            prepend-icon="mdi-download"
+            @click="directDownloadJson"
+          >
+            Unduh .JSON
+          </v-btn>
+        </div>
+      </div>
+
       <div class="canvas-container">
         <svg viewBox="0 0 1000 1414" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
           <rect width="1000" height="1414" fill="#ffffff" />
           
-          <!-- Judul LJK Global -->
-          <text x="500" y="95" font-size="28" font-weight="bold" text-anchor="middle" font-family="Inter, sans-serif" fill="#0f172a">{{ omrStore.activeTemplate.name }}</text>
+          <!-- Judul LJK Global (Diposisikan di y=95 dengan jarak aman dari ticker mark dan batas atas) -->
+          <text x="500" y="95" font-size="26" font-weight="bold" text-anchor="middle" font-family="Inter, sans-serif" fill="#0f172a">{{ omrStore.activeTemplate.name }}</text>
 
           <!-- Penanda Batas Optik & Fiducial -->
           <g id="fiducial-marks">
@@ -170,22 +280,23 @@
           <g v-for="block in omrStore.activeTemplate.blocks" :key="block.id" :transform="'translate(' + block.x + ',' + block.y + ')'" style="transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.5, 1);">
             
             <g v-if="block.type === 'handwritten_identity'">
-              <rect :width="820" :height="220" fill="none" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,4" />
+              <rect :width="820" :height="195" fill="none" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,4" />
               <rect x="0" y="-19" width="7" height="7" fill="#0f172a" rx="1.5" />
               <text x="12" y="-13" font-size="11" font-weight="bold" fill="#334155" font-family="Inter, sans-serif">{{ block.title }}</text>
-              <text x="15" y="25" font-size="12" font-weight="bold" font-family="Inter, sans-serif">Nama Lengkap:</text>
-              <rect x="15" y="35" width="790" height="25" fill="none" stroke="#475569" stroke-width="1" />
-              <text x="15" y="80" font-size="12" font-weight="bold" font-family="Inter, sans-serif">Kelas:</text>
-              <rect x="15" y="90" width="150" height="25" fill="none" stroke="#475569" stroke-width="1" />
-              <text x="180" y="80" font-size="12" font-weight="bold" font-family="Inter, sans-serif">No. Peserta:</text>
-              <rect x="180" y="90" width="150" height="25" fill="none" stroke="#475569" stroke-width="1" />
-              <text x="345" y="80" font-size="12" font-weight="bold" font-family="Inter, sans-serif">Tanggal Pelaksanaan Tes:</text>
-              <rect x="345" y="90" width="460" height="25" fill="none" stroke="#475569" stroke-width="1" />
+              <text x="15" y="22" font-size="11" font-weight="bold" font-family="Inter, sans-serif">Nama Lengkap:</text>
+              <rect x="15" y="28" width="790" height="24" fill="none" stroke="#475569" stroke-width="1" />
+              
+              <text x="15" y="70" font-size="11" font-weight="bold" font-family="Inter, sans-serif">Kelas:</text>
+              <rect x="15" y="76" width="150" height="24" fill="none" stroke="#475569" stroke-width="1" />
+              <text x="180" y="70" font-size="11" font-weight="bold" font-family="Inter, sans-serif">No. Peserta:</text>
+              <rect x="180" y="76" width="150" height="24" fill="none" stroke="#475569" stroke-width="1" />
+              <text x="345" y="70" font-size="11" font-weight="bold" font-family="Inter, sans-serif">Tanggal Pelaksanaan Tes:</text>
+              <rect x="345" y="76" width="460" height="24" fill="none" stroke="#475569" stroke-width="1" />
 
-              <text x="15" y="145" font-size="12" font-weight="bold" font-family="Inter, sans-serif">Pernyataan Kejujuran: Salin teks <tspan font-style="italic">"Saya mengerjakan tes dengan jujur."</tspan></text>
-              <rect x="15" y="155" width="550" height="50" fill="none" stroke="#475569" stroke-width="1" />
-              <text x="580" y="145" font-size="12" font-weight="bold" font-family="Inter, sans-serif">Tanda Tangan:</text>
-              <rect x="580" y="155" width="225" height="50" fill="none" stroke="#475569" stroke-width="1" />
+              <text x="15" y="124" font-size="11" font-weight="bold" font-family="Inter, sans-serif">Pernyataan Kejujuran: Salin teks <tspan font-style="italic">"Saya mengerjakan tes dengan jujur."</tspan></text>
+              <rect x="15" y="132" width="550" height="48" fill="none" stroke="#475569" stroke-width="1" />
+              <text x="580" y="124" font-size="11" font-weight="bold" font-family="Inter, sans-serif">Tanda Tangan:</text>
+              <rect x="580" y="132" width="225" height="48" fill="none" stroke="#475569" stroke-width="1" />
             </g>
 
             <g v-else-if="block.direction === 'vertical'">
@@ -230,14 +341,14 @@
 
             <g v-else-if="block.direction === 'horizontal'">
               <g>
-                <rect v-for="r in (block.type === 'bs3' ? (block.rows||1)*3 : block.rows)" :key="'z_row_'+r" v-show="(r-1) % 2 === 1" x="5" :y="(r-1)*30 + 5" :width="(block.options?.length||0) * 35 + 40" height="30" fill="#f8fafc" />
+                <rect v-for="r in ((block.type === 'bs3' || block.type === 'yt3') ? (block.rows||1)*3 : block.rows)" :key="'z_row_'+r" v-show="(r-1) % 2 === 1" x="5" :y="(r-1)*30 + 5" :width="(block.options?.length||0) * 35 + 40" height="30" fill="#f8fafc" />
               </g>
-              <rect :width="(block.options?.length||0) * 35 + 50" :height="(block.type === 'bs3' ? (block.rows||1)*3 : block.rows||1) * 30 + 10" fill="none" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,4" />
+              <rect :width="(block.options?.length||0) * 35 + 50" :height="((block.type === 'bs3' || block.type === 'yt3') ? (block.rows||1)*3 : block.rows||1) * 30 + 10" fill="none" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4,4" />
               <rect x="0" y="-19" width="7" height="7" fill="#0f172a" rx="1.5" />
               <text x="12" y="-13" font-size="11" font-weight="bold" fill="#334155" font-family="Inter, sans-serif">{{ block.title }}</text>
               
-              <g v-for="r in (block.type === 'bs3' ? (block.rows||1)*3 : block.rows)" :key="'r'+r">
-                <text v-if="block.type !== 'bs3' || (r-1)%3 === 0" :x="10" :y="(r-1)*30 + 25" font-size="12" font-weight="bold" font-family="Inter, sans-serif">{{ (block.startNum||0) + (block.type === 'bs3' ? Math.floor((r-1)/3) : (r - 1)) }}.</text>
+              <g v-for="r in ((block.type === 'bs3' || block.type === 'yt3') ? (block.rows||1)*3 : block.rows)" :key="'r'+r">
+                <text v-if="(block.type !== 'bs3' && block.type !== 'yt3') || (r-1)%3 === 0" :x="10" :y="(r-1)*30 + 25" font-size="12" font-weight="bold" font-family="Inter, sans-serif">{{ (block.startNum||0) + ((block.type === 'bs3' || block.type === 'yt3') ? Math.floor((r-1)/3) : (r - 1)) }}.</text>
                 <g v-for="(opt, oIdx) in block.options" :key="'o'+oIdx">
                   <circle v-if="block.type !== 'kompleks'" :cx="oIdx*35 + 45" :cy="(r-1)*30 + 20" r="10" fill="none" stroke="#475569" stroke-width="1.5" />
                   <rect v-else :x="oIdx*35 + 35" :y="(r-1)*30 + 10" width="20" height="20" rx="3" fill="none" stroke="#475569" stroke-width="1.5" />
@@ -247,17 +358,70 @@
             </g>
 
             <g v-else-if="block.type === 'teks_kustom'">
-              <rect :width="block.cols || 150" :height="block.rows || 100" fill="none" stroke="#475569" stroke-width="2" />
+              <rect :width="block.cols || 150" :height="block.rows || 100" fill="none" stroke="#475569" stroke-width="1.5" />
               <rect x="0" y="-19" width="7" height="7" fill="#0f172a" rx="1.5" />
               <text x="12" y="-13" font-size="11" font-weight="bold" fill="#334155" font-family="Inter, sans-serif">{{ block.title }}</text>
               <foreignObject x="10" y="10" :width="(block.cols || 150) - 20" :height="(block.rows || 100) - 20">
-                <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: Inter, sans-serif; font-size: 14px; color: #0f172a; text-align: justify; word-wrap: break-word; line-height: 1.4; width: 100%; height: 100%; overflow: hidden; white-space: pre-wrap;">{{ block.prefillValue || 'Teks kosong' }}</div>
+                <div xmlns="http://www.w3.org/1999/xhtml" style="font-family: Inter, sans-serif; font-size: 13px; color: #0f172a; text-align: justify; word-wrap: break-word; line-height: 1.4; width: 100%; height: 100%; overflow: hidden; white-space: pre-wrap;">{{ block.prefillValue || 'Catatan kosong' }}</div>
               </foreignObject>
             </g>
           </g>
         </svg>
       </div>
     </div>
+
+    <!-- Dialog Ekspor Desain JSON & Koordinat ROI Lengkap -->
+    <v-dialog v-model="showJsonDialog" max-width="850" scrollable>
+      <v-card class="rounded-xl overflow-hidden shadow-2xl">
+        <v-card-title class="pa-4 bg-slate-900 text-white d-flex align-center justify-space-between">
+          <div class="d-flex align-center">
+            <v-icon color="teal-lighten-2" icon="mdi-code-json" class="mr-2"></v-icon>
+            <div>
+              <div class="text-subtitle-1 font-weight-bold">Ekspor Desain LJK & Koordinat ROI (JSON)</div>
+              <div class="text-caption text-grey-lighten-1">Spesifikasi Region of Interest (ROI) optik lengkap untuk mesin OMR & AI Vision</div>
+            </div>
+          </div>
+          <v-btn icon="mdi-close" variant="text" color="white" density="compact" @click="showJsonDialog = false"></v-btn>
+        </v-card-title>
+
+        <!-- Summary Chips -->
+        <div class="pa-3 bg-grey-lighten-4 border-b d-flex flex-wrap gap-2 align-center">
+          <v-chip size="small" color="primary" variant="flat" prepend-icon="mdi-view-grid-outline">
+            {{ exportedJsonStats.totalBlocks }} Blok
+          </v-chip>
+          <v-chip size="small" color="teal-darken-2" variant="flat" prepend-icon="mdi-checkbox-blank-circle-outline">
+            {{ exportedJsonStats.totalBubbles }} Titik ROI Bulatan
+          </v-chip>
+          <v-chip size="small" color="indigo-darken-1" variant="flat" prepend-icon="mdi-numeric">
+            {{ exportedJsonStats.totalDigitBoxes }} Kotak Digit
+          </v-chip>
+          <v-chip size="small" color="amber-darken-3" variant="flat" prepend-icon="mdi-lead-pencil">
+            {{ exportedJsonStats.totalHandwritten }} Bidang Isian Tulisan
+          </v-chip>
+          <v-chip size="small" color="blue-grey-darken-1" variant="outlined">
+            Kanvas: 1000 × 1414 px
+          </v-chip>
+        </div>
+
+        <v-card-text class="pa-4 bg-slate-950" style="max-height: 520px;">
+          <pre class="text-caption text-emerald-400 pa-2 overflow-x-auto" style="white-space: pre; line-height: 1.45; font-family: monospace; user-select: all;">{{ exportedJsonString }}</pre>
+        </v-card-text>
+
+        <v-card-actions class="pa-4 bg-white border-t d-flex justify-space-between align-center flex-wrap gap-2">
+          <v-btn variant="text" color="grey-darken-1" rounded="pill" @click="showJsonDialog = false">
+            Tutup
+          </v-btn>
+          <div class="d-flex gap-2">
+            <v-btn variant="outlined" color="primary" rounded="pill" prepend-icon="mdi-content-copy" @click="copyJsonToClipboard">
+              Salin JSON
+            </v-btn>
+            <v-btn color="primary" variant="flat" rounded="pill" class="px-5 font-weight-bold" prepend-icon="mdi-download" @click="directDownloadJson">
+              Unduh Berkas .json
+            </v-btn>
+          </div>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -265,34 +429,43 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import { useOmrStore } from '../store/omrStore';
 import type { TemplateBlock } from '../db/database';
+import { generateOmrRoiJson, downloadJsonFile } from '../utils/roiExporter';
 
 const omrStore = useOmrStore();
 
 const separatorY = ref(0);
+const selectedTemplateToLoad = ref('');
 const selectedBlockType = ref('biasa');
 const selectedOptionCount = ref(4); 
 const selectedRowCount = ref(10); 
 
+// Istilah-istilah blok soal sesuai spesifikasi:
+// PG Biasa, PG Kompleks, BS (1 set), BS (3 set), YT (1 set), YT (3 set), Skala, Menjodohkan, Catatan
 const availableBlockTypes = [
   { id: 'handwritten_identity', label: 'ID: Tulis Tangan' },
   { id: 'identity_nisn', label: 'ID: NISN' },
   { id: 'identity_npsn', label: 'ID: NPSN' },
   { id: 'identity_subject', label: 'ID: Mapel' },
   { id: 'identity_test', label: 'ID: Kode Tes' },
-  { id: 'biasa', label: 'PG' },
+  { id: 'biasa', label: 'PG Biasa' },
   { id: 'kompleks', label: 'PG Kompleks' },
-  { id: 'bs', label: 'B / S' },
-  { id: 'bs3', label: 'B / S (3 Baris)' },
-  { id: 'sts', label: 'S / TS' },
+  { id: 'bs', label: 'BS (1 set)' },
+  { id: 'bs3', label: 'BS (3 set)' },
+  { id: 'yt', label: 'YT (1 set)' },
+  { id: 'yt3', label: 'YT (3 set)' },
   { id: 'skala', label: 'Skala' },
-  { id: 'jodoh', label: 'Jodohkan' },
-  { id: 'teks_kustom', label: 'Teks Info' }
+  { id: 'jodoh', label: 'Menjodohkan' },
+  { id: 'teks_kustom', label: 'Catatan' }
 ];
 
 const identityTypes = ['handwritten_identity', 'identity_nisn', 'identity_npsn', 'identity_subject', 'identity_test'];
 
 const isQuestionBlock = computed(() => {
   return !identityTypes.includes(selectedBlockType.value);
+});
+
+const hasQuestionBlocks = computed(() => {
+  return omrStore.activeTemplate.blocks.some(b => !identityTypes.includes(b.type));
 });
 
 const rowCountChoices = Array.from({ length: 20 }, (_, i) => i + 1);
@@ -318,6 +491,10 @@ const dynamicOptionChoices = computed(() => {
           const endChar = String.fromCharCode(65 + val - 1);
           return { title: `${val} (A-${endChar})`, value: val };
       });
+  } else if (['bs', 'bs3'].includes(type)) {
+      return [{ title: '2 (B, S)', value: 2 }];
+  } else if (['yt', 'yt3'].includes(type)) {
+      return [{ title: '2 (Y, T)', value: 2 }];
   } else {
       return [{ title: 'Bawaan', value: 0 }];
   }
@@ -335,7 +512,9 @@ const recalculateQuestionNumbers = () => {
 
 watch(selectedBlockType, (newType) => {
   if (['biasa', 'kompleks', 'skala', 'jodoh'].includes(newType)) {
-      selectedOptionCount.value = newType === 'jodoh' ? 5 : 4; 
+      selectedOptionCount.value = newType === 'jodoh' ? 4 : 4; 
+  } else if (['bs', 'bs3', 'yt', 'yt3'].includes(newType)) {
+      selectedOptionCount.value = 2;
   }
 });
 
@@ -401,26 +580,31 @@ const addBlock = () => {
               newBlock = { ...newBlock, title: 'Kode Tes', direction: 'vertical', cols: 2, rows: 10, options: ['0','1','2','3','4','5','6','7','8','9'], prefillValue: '01' };
               break;
           case 'biasa':
+              newBlock = { ...newBlock, title: 'PG Biasa', direction: 'horizontal', rows: rowCount, options: generateAlphaOptions(optCount), startNum: 1 };
+              break;
           case 'kompleks':
-              newBlock = { ...newBlock, title: type === 'biasa' ? 'PG' : 'PGK', direction: 'horizontal', rows: rowCount, options: generateAlphaOptions(optCount), startNum: 1 };
+              newBlock = { ...newBlock, title: 'PG Kompleks', direction: 'horizontal', rows: rowCount, options: generateAlphaOptions(optCount), startNum: 1 };
               break;
           case 'bs':
-              newBlock = { ...newBlock, title: 'B / S', direction: 'horizontal', rows: rowCount, options: ['B','S'], startNum: 1 };
+              newBlock = { ...newBlock, title: 'BS (1 set)', direction: 'horizontal', rows: rowCount, options: ['B','S'], startNum: 1 };
               break;
           case 'bs3':
-              newBlock = { ...newBlock, title: 'B/S (3B)', direction: 'horizontal', rows: rowCount, options: ['B','S'], startNum: 1 };
+              newBlock = { ...newBlock, title: 'BS (3 set)', direction: 'horizontal', rows: rowCount, options: ['B','S'], startNum: 1 };
               break;
-          case 'sts':
-              newBlock = { ...newBlock, title: 'S / TS', direction: 'horizontal', rows: rowCount, options: ['S','TS'], startNum: 1 };
+          case 'yt':
+              newBlock = { ...newBlock, title: 'YT (1 set)', direction: 'horizontal', rows: rowCount, options: ['Y','T'], startNum: 1 };
+              break;
+          case 'yt3':
+              newBlock = { ...newBlock, title: 'YT (3 set)', direction: 'horizontal', rows: rowCount, options: ['Y','T'], startNum: 1 };
               break;
           case 'skala':
               newBlock = { ...newBlock, title: 'Skala', direction: 'horizontal', rows: rowCount, options: generateNumericOptions(optCount), startNum: 1 };
               break;
           case 'jodoh':
-              newBlock = { ...newBlock, title: 'Jodohkan', direction: 'horizontal', rows: rowCount, options: generateAlphaOptions(optCount), startNum: 1 };
+              newBlock = { ...newBlock, title: 'Menjodohkan', direction: 'horizontal', rows: rowCount, options: generateAlphaOptions(optCount), startNum: 1 };
               break;
           case 'teks_kustom':
-              newBlock = { ...newBlock, title: 'Keterangan', direction: 'teks', prefillValue: 'Teks keterangan\nBisa multiline', cols: 150, rows: 100 };
+              newBlock = { ...newBlock, title: 'Catatan', direction: 'teks', prefillValue: 'Jaga lembar jawaban agar tidak terlipat, basah, atau kotor.', cols: 250, rows: 95 };
               break;
           default:
               throw new Error("Tipe blok tidak dikenal.");
@@ -428,18 +612,19 @@ const addBlock = () => {
 
       blocks.push(newBlock);
       autoLayoutBlocks();
-      omrStore.showToast(`Blok disisipkan`, 'success');
+      omrStore.showToast(`Blok ${newBlock.title} ditambahkan`, 'success');
   } catch (error: any) {
       omrStore.showToast(`Kesalahan: ${error.message}`, 'error');
   }
 };
 
 const getBlockDimensions = (block: TemplateBlock) => {
-  if (block.type === 'handwritten_identity') return { width: 820, height: 220 };
-  if (block.type === 'teks_kustom') return { width: block.cols || 150, height: block.rows || 100 };
+  if (block.type === 'handwritten_identity') return { width: 820, height: 195 };
+  if (block.type === 'teks_kustom') return { width: block.cols || 250, height: block.rows || 95 };
   
+  const isTriple = block.type === 'bs3' || block.type === 'yt3';
   const width = block.direction === 'vertical' ? (block.cols||0) * 32 + 20 : (block.options?.length||0) * 35 + 50;
-  const height = block.direction === 'vertical' ? (block.rows||0) * 28 + 60 : (block.type === 'bs3' ? (block.rows||0)*3 : (block.rows||0)) * 30 + 10;
+  const height = block.direction === 'vertical' ? (block.rows||0) * 28 + 60 : (isTriple ? (block.rows||0)*3 : (block.rows||0)) * 30 + 10;
   return { width, height };
 };
 
@@ -500,7 +685,6 @@ const positionRowFluidly = (
   const rawGap = remainingSpace / (k - 1);
 
   if (rawGap >= minGap && rawGap <= maxGap) {
-    // Ruang terisi penuh dan merata dari tepi kiri ke tepi kanan
     let curX = leftBound;
     for (let i = 0; i < k; i++) {
       row[i].x = Math.round(curX);
@@ -508,7 +692,6 @@ const positionRowFluidly = (
       curX += dimsList[i].width + rawGap;
     }
   } else if (rawGap > maxGap) {
-    // Sisa ruang terlalu lebar: gunakan batas maksimum celah dan tengahkan baris dengan margin samping seimbang
     const effectiveGap = maxGap;
     const contentRowWidth = totalBlockWidth + (k - 1) * effectiveGap;
     const sideMargin = Math.max(0, (availableWidth - contentRowWidth) / 2);
@@ -520,7 +703,6 @@ const positionRowFluidly = (
       curX += dimsList[i].width + effectiveGap;
     }
   } else {
-    // Area padat: distribusikan ruang yang tersisa secara proporsional
     const effectiveGap = Math.max(4, remainingSpace / (k - 1));
     let curX = leftBound;
     for (let i = 0; i < k; i++) {
@@ -537,8 +719,8 @@ const autoLayoutBlocks = (force = false) => {
     const LEFT_BOUND = 90;
     const RIGHT_BOUND = 910;
     const USABLE_WIDTH = RIGHT_BOUND - LEFT_BOUND; // 820px
-    const MARGIN_TOP = 145;
-    const GAP_Y = 28;
+    const MARGIN_TOP = 135;
+    const GAP_Y = 30;
     const MAX_Y_LIMIT = 1320;
     const MAX_NATURAL_GAP = 60;
     const MIN_NATURAL_GAP = 14;
@@ -554,7 +736,7 @@ const autoLayoutBlocks = (force = false) => {
     if (handwrittenBlock) {
       handwrittenBlock.x = LEFT_BOUND;
       handwrittenBlock.y = currentY;
-      currentY += 220 + GAP_Y;
+      currentY += 195 + GAP_Y;
     }
 
     // 2. Blok Identitas Digital (NISN, NPSN, Mapel, Kode Tes)
@@ -651,7 +833,7 @@ const autoLayoutBlocks = (force = false) => {
     });
 
   } catch (error: any) {
-    omrStore.showToast(`Kesalahan Modul Penataan Otomatis: ${error.message}`, 'error');
+    omrStore.showToast(`Kesalahan Penataan: ${error.message}`, 'error');
   }
 };
 
@@ -660,12 +842,87 @@ const removeBlock = (index: number) => {
   autoLayoutBlocks(); 
 };
 
-onMounted(() => {
-  if(omrStore.activeTemplate.id === '') {
-      omrStore.createNewTemplate();
-      autoLayoutBlocks(true);
+const createBlankSheet = () => {
+  omrStore.createNewTemplate();
+  autoLayoutBlocks(true);
+  omrStore.showToast('Lembar baru siap tanpa blok soal.', 'info');
+};
+
+const loadSelectedTemplate = () => {
+  if (!selectedTemplateToLoad.value) return;
+  const tpl = omrStore.savedTemplates.find(t => t.id === selectedTemplateToLoad.value);
+  if (tpl) {
+    omrStore.openTemplate(tpl);
+    autoLayoutBlocks();
+    omrStore.showToast(`Memuat templat: ${tpl.name}`, 'success');
+  }
+};
+
+// State dan Aksi Ekspor JSON & ROI Lengkap
+const showJsonDialog = ref(false);
+const exportedJsonString = ref('');
+const exportedJsonStats = ref({
+  totalBlocks: 0,
+  totalBubbles: 0,
+  totalDigitBoxes: 0,
+  totalHandwritten: 0,
+  questionCount: 0
+});
+
+const generateJsonData = () => {
+  const tpl = JSON.parse(JSON.stringify(omrStore.activeTemplate));
+  tpl.blocks.forEach((b: TemplateBlock) => {
+    b.bubbles = omrStore.computeBlockBubbles(b);
+  });
+  return generateOmrRoiJson(tpl);
+};
+
+const directDownloadJson = () => {
+  try {
+    const data = generateJsonData();
+    const safeName = (omrStore.activeTemplate.name || 'Desain_LJK').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const filename = `${safeName}_ROI_Coordinates.json`;
+    downloadJsonFile(data, filename);
+    omrStore.showToast(`Berkas JSON ROI berhasil diunduh (${filename})`, 'success');
+  } catch (err: any) {
+    omrStore.showToast(`Gagal mengunduh JSON: ${err.message}`, 'error');
+  }
+};
+
+const openJsonExportDialog = () => {
+  try {
+    const data = generateJsonData();
+    exportedJsonString.value = JSON.stringify(data, null, 2);
+    exportedJsonStats.value = {
+      totalBlocks: data.summary.total_blocks,
+      totalBubbles: data.summary.total_bubbles,
+      totalDigitBoxes: data.summary.total_digit_boxes,
+      totalHandwritten: data.summary.total_handwritten_fields,
+      questionCount: data.summary.question_count
+    };
+    showJsonDialog.value = true;
+  } catch (err: any) {
+    omrStore.showToast(`Gagal menyiapkan data JSON: ${err.message}`, 'error');
+  }
+};
+
+const copyJsonToClipboard = async () => {
+  try {
+    await navigator.clipboard.writeText(exportedJsonString.value);
+    omrStore.showToast('JSON ROI berhasil disalin ke papan klip!', 'success');
+  } catch {
+    omrStore.showToast('Gagal menyalin otomatis, silakan salin teks manual.', 'warning');
+  }
+};
+
+onMounted(async () => {
+  await omrStore.loadTemplatesFromDB();
+  // Pastikan jika aktif templat belum ada ID, buat lembar baru dengan area soal kosong
+  if (!omrStore.activeTemplate.id || omrStore.activeTemplate.blocks.length === 0) {
+    omrStore.createNewTemplate();
+    autoLayoutBlocks(true);
   } else {
-      autoLayoutBlocks();
+    autoLayoutBlocks();
   }
 });
 </script>
@@ -686,3 +943,4 @@ onMounted(() => {
   min-width: 0;
 }
 </style>
+

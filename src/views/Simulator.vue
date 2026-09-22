@@ -1221,6 +1221,9 @@ const getSafeOptions = (block: TemplateBlock): string[] => {
   if (block.type === 'bs' || block.type === 'bs3') {
     return ['B', 'S'];
   }
+  if (block.type === 'yt' || block.type === 'yt3') {
+    return ['Y', 'T'];
+  }
   if (block.type === 'sts') {
     return ['S', 'TS'];
   }
@@ -1249,7 +1252,7 @@ const generateAnswerKey = (template: OmrTemplate): Record<string | number, any> 
             const numAns = Math.min(opts.length, Math.floor(Math.random() * 2) + 1);
             const shuffledOpts = [...opts].sort(() => 0.5 - Math.random());
             answerKey[block.id].push(shuffledOpts.slice(0, numAns));
-          } else if (block.type === 'bs3') {
+          } else if (block.type === 'bs3' || block.type === 'yt3') {
             const ansArray = [
               opts[Math.floor(Math.random() * opts.length)],
               opts[Math.floor(Math.random() * opts.length)],
@@ -1310,7 +1313,7 @@ const generateStudentAnswers = (template: OmrTemplate, answerKey: Record<string 
               const shuffledOpts = [...opts].sort(() => 0.5 - Math.random());
               studentAnswers[block.id].push(shuffledOpts.slice(0, numAns));
             }
-          } else if (block.type === 'bs3') {
+          } else if (block.type === 'bs3' || block.type === 'yt3') {
             const studentAnsArray: string[] = [];
             for (let sub = 0; sub < 3; sub++) {
               if (Math.random() < 0.8 && keyBlockAns[r]?.[sub]) {
@@ -1425,7 +1428,8 @@ const buildSvgString = (template: OmrTemplate, simData: any): string => {
     } else if (block.direction === 'horizontal') {
       const rows = block.rows || 1;
       const opts = getSafeOptions(block);
-      const totalRows = block.type === 'bs3' ? rows * 3 : rows;
+      const isTriple = block.type === 'bs3' || block.type === 'yt3';
+      const totalRows = isTriple ? rows * 3 : rows;
       
       let bgRows = '';
       for(let r=1; r<=totalRows; r++) {
@@ -1434,14 +1438,14 @@ const buildSvgString = (template: OmrTemplate, simData: any): string => {
       
       let optionsHtml = '';
       for(let r=1; r<=totalRows; r++) {
-        if (block.type !== 'bs3' || (r-1)%3 === 0) {
-          const num = (block.startNum || 1) + (block.type === 'bs3' ? Math.floor((r-1)/3) : (r - 1));
+        if (!isTriple || (r-1)%3 === 0) {
+          const num = (block.startNum || 1) + (isTriple ? Math.floor((r-1)/3) : (r - 1));
           optionsHtml += `<text x="10" y="${(r-1)*30 + 25}" font-size="12" font-weight="bold" font-family="Inter, sans-serif">${num}.</text>`;
         }
         
         let rowAns: string[] = [];
         if (isAns && simData.answers[block.id]) {
-          if (block.type === 'bs3') {
+          if (isTriple) {
             const qIdx = Math.floor((r-1)/3);
             const subIdx = (r-1)%3;
             if (simData.answers[block.id][qIdx] && simData.answers[block.id][qIdx][subIdx]) {
@@ -1495,7 +1499,7 @@ const buildSvgString = (template: OmrTemplate, simData: any): string => {
   return `
     <svg viewBox="0 0 1000 1414" width="1000" height="1414" xmlns="http://www.w3.org/2000/svg">
       <rect width="1000" height="1414" fill="#ffffff" />
-      <text x="500" y="95" font-size="28" font-weight="bold" text-anchor="middle" font-family="Inter, sans-serif" fill="#0f172a">${escapeXml(template.name)}</text>
+      <text x="500" y="95" font-size="26" font-weight="bold" text-anchor="middle" font-family="Inter, sans-serif" fill="#0f172a">${escapeXml(template.name)}</text>
       
       <g id="fiducial-marks">
         <g fill="#0f172a">

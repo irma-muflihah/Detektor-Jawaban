@@ -247,7 +247,7 @@ const processKoreksi = async () => {
           continue;
         }
         
-        if (keyAns.bentuk_soal === 'bs3') {
+        if (keyAns.bentuk_soal === 'bs3' || keyAns.bentuk_soal === 'yt3') {
           const userArr = Array.isArray(userAns.jawaban) ? userAns.jawaban : [];
           const keyArr = Array.isArray(keyAns.jawaban) ? keyAns.jawaban : [];
           

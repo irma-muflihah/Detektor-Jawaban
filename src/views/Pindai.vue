@@ -681,17 +681,18 @@ const processOMRImage = async (imageSource: HTMLImageElement | HTMLVideoElement)
           } else if (block.direction === 'horizontal') {
             const rows = block.rows || 1;
             const opts = block.options || [];
-            const totalRows = block.type === 'bs3' ? rows * 3 : rows;
-            let bs3Answers: { [key: number]: string[] } = {};
+            const isTriple = block.type === 'bs3' || block.type === 'yt3';
+            const totalRows = isTriple ? rows * 3 : rows;
+            let tripleAnswers: { [key: number]: string[] } = {};
             
             for (let r = 1; r <= totalRows; r++) {
-              const qNum = (block.startNum || 0) + (block.type === 'bs3' ? Math.floor((r-1)/3) : (r - 1));
+              const qNum = (block.startNum || 0) + (isTriple ? Math.floor((r-1)/3) : (r - 1));
               let selectedValues: string[] = [];
               let maxIntensity = 0;
               let selectedValue = '';
               
               opts.forEach((_opt, oIdx) => {
-                const subId = block.type === 'bs3' ? `_sub${(r-1)%3}` : '';
+                const subId = isTriple ? `_sub${(r-1)%3}` : '';
                 const bubble = block.bubbles!.find(b => b.id === `q${qNum}${subId}_opt${oIdx}`);
                 if (bubble) {
                   const bSize = block.type === 'kompleks' ? 20 : bubble.r * 2;
@@ -729,9 +730,9 @@ const processOMRImage = async (imageSource: HTMLImageElement | HTMLVideoElement)
                   bentuk_soal: block.type,
                   jawaban: selectedValues.length > 0 ? selectedValues : []
                 });
-              } else if (block.type === 'bs3') {
-                if (!bs3Answers[qNum]) bs3Answers[qNum] = [];
-                bs3Answers[qNum].push(maxIntensity > 100 ? selectedValue : '-');
+              } else if (isTriple) {
+                if (!tripleAnswers[qNum]) tripleAnswers[qNum] = [];
+                tripleAnswers[qNum].push(maxIntensity > 100 ? selectedValue : '-');
               } else {
                 if (maxIntensity > 100) {
                   answers.push({
@@ -749,8 +750,8 @@ const processOMRImage = async (imageSource: HTMLImageElement | HTMLVideoElement)
               }
             }
             
-            if (block.type === 'bs3') {
-              for (const [qn, ansArr] of Object.entries(bs3Answers)) {
+            if (isTriple) {
+              for (const [qn, ansArr] of Object.entries(tripleAnswers)) {
                 answers.push({
                   nomor_soal: Number(qn),
                   bentuk_soal: block.type,

@@ -23,11 +23,12 @@ export const useOmrStore = defineStore('omr', () => {
     } else if (block.direction === 'horizontal') {
       const rows = block.rows || 1;
       const opts = block.options || [];
-      const totalRows = block.type === 'bs3' ? rows * 3 : rows;
+      const isTriple = block.type === 'bs3' || block.type === 'yt3';
+      const totalRows = isTriple ? rows * 3 : rows;
       for (let r = 1; r <= totalRows; r++) {
-        const qNum = (block.startNum || 0) + (block.type === 'bs3' ? Math.floor((r - 1) / 3) : r - 1);
+        const qNum = (block.startNum || 0) + (isTriple ? Math.floor((r - 1) / 3) : r - 1);
         opts.forEach((opt, oIdx) => {
-          const subId = block.type === 'bs3' ? `_sub${(r - 1) % 3}` : '';
+          const subId = isTriple ? `_sub${(r - 1) % 3}` : '';
           const bubbleId = `q${qNum}${subId}_opt${oIdx}`;
           if (block.type === 'kompleks') {
             bubbles.push({
@@ -53,31 +54,163 @@ export const useOmrStore = defineStore('omr', () => {
     return bubbles;
   };
 
+  // Inisiasi templat "Lembar Jawaban Latihan TKA 1" persis sesuai desain LJK_LTKA_1.jpg dengan proporsi vertikal ideal
   const createInitialTKATemplate = (): OmrTemplate => {
     const tpl: OmrTemplate = {
       id: 'tpl_latihan_tka',
-      name: 'Lembar Jawaban Latihan TKA',
+      name: 'Lembar Jawaban Latihan TKA 1',
       updatedAt: Date.now(),
       autoLayout: false,
       blocks: [
-        { id: 1, x: 90, y: 140, type: 'handwritten_identity', title: 'Data Peserta', direction: 'handwritten', cols: 0, rows: 0, options: [], prefillValue: '' },
-        { id: 2, x: 90, y: 390, type: 'identity_nisn', title: 'NISN', direction: 'vertical', cols: 10, rows: 10, options: ['0','1','2','3','4','5','6','7','8','9'], prefillValue: '' },
-        { id: 3, x: 442, y: 390, type: 'identity_npsn', title: 'NPSN', direction: 'vertical', cols: 8, rows: 10, options: ['0','1','2','3','4','5','6','7','8','9'], prefillValue: '20301942' },
-        { id: 4, x: 730, y: 390, type: 'identity_subject', title: 'ID Mapel', direction: 'vertical', cols: 2, rows: 10, options: ['0','1','2','3','4','5','6','7','8','9'], prefillValue: '' },
-        { id: 5, x: 826, y: 390, type: 'identity_test', title: 'Kode Tes', direction: 'vertical', cols: 2, rows: 10, options: ['0','1','2','3','4','5','6','7','8','9'], prefillValue: '' },
-        // 1. Satu blok pilihan ganda biasa dengan 4 opsi sebanyak 12 item (No. 1 - 12)
-        { id: 6, x: 95, y: 765, type: 'biasa', title: 'PG', direction: 'horizontal', rows: 12, options: ['A', 'B', 'C', 'D'], startNum: 1 },
-        // 2. Satu blok pilihan ganda kompleks dengan 4 opsi sebanyak 6 item (No. 13 - 18)
-        { id: 7, x: 375, y: 765, type: 'kompleks', title: 'PGK', direction: 'horizontal', rows: 6, options: ['A', 'B', 'C', 'D'], startNum: 13 },
-        // 3. Satu blok soal benar salah dengan 3 pasang opsi sebanyak 6 item (No. 19 - 24)
-        { id: 8, x: 745, y: 765, type: 'bs3', title: 'B/S (3B)', direction: 'horizontal', rows: 6, options: ['B', 'S'], startNum: 19 },
-        // 4. Dua blok soal menjodohkan dengan 4 opsi jawaban masing-masing 3 item
-        // Blok menjodohkan ke-1 (No. 25 - 27)
-        { id: 9, x: 95, y: 1160, type: 'jodoh', title: 'Jodohkan 1', direction: 'horizontal', rows: 3, options: ['A', 'B', 'C', 'D'], startNum: 25 },
-        // Blok menjodohkan ke-2 (No. 28 - 30)
-        { id: 10, x: 375, y: 980, type: 'jodoh', title: 'Jodohkan 2', direction: 'horizontal', rows: 3, options: ['A', 'B', 'C', 'D'], startNum: 28 },
-        // 5. Satu item blok catatan dengan teks: Jaga lembar jawaban komputer tetap bersih, tidak terlipat.
-        { id: 11, x: 375, y: 1105, type: 'teks_kustom', title: 'Catatan', direction: 'teks', cols: 250, rows: 95, prefillValue: 'Jaga lembar jawaban komputer tetap bersih, tidak terlipat.' }
+        // 1. Data Peserta (Mulai pada y=135 untuk memberi jarak aman 40px+ dari judul di y=95 dan ticker mark)
+        {
+          id: 1,
+          x: 90,
+          y: 135,
+          type: 'handwritten_identity',
+          title: 'Data Peserta',
+          direction: 'handwritten',
+          cols: 0,
+          rows: 0,
+          options: [],
+          prefillValue: ''
+        },
+        // 2. NISN (10 kolom)
+        {
+          id: 2,
+          x: 90,
+          y: 360,
+          type: 'identity_nisn',
+          title: 'NISN',
+          direction: 'vertical',
+          cols: 10,
+          rows: 10,
+          options: ['0','1','2','3','4','5','6','7','8','9'],
+          prefillValue: ''
+        },
+        // 3. NPSN (8 kolom, default terisi 20301942)
+        {
+          id: 3,
+          x: 442,
+          y: 360,
+          type: 'identity_npsn',
+          title: 'NPSN',
+          direction: 'vertical',
+          cols: 8,
+          rows: 10,
+          options: ['0','1','2','3','4','5','6','7','8','9'],
+          prefillValue: '20301942'
+        },
+        // 4. ID Mapel (2 kolom)
+        {
+          id: 4,
+          x: 725,
+          y: 360,
+          type: 'identity_subject',
+          title: 'ID Mapel',
+          direction: 'vertical',
+          cols: 2,
+          rows: 10,
+          options: ['0','1','2','3','4','5','6','7','8','9'],
+          prefillValue: '01'
+        },
+        // 5. Kode Tes (2 kolom)
+        {
+          id: 5,
+          x: 820,
+          y: 360,
+          type: 'identity_test',
+          title: 'Kode Tes',
+          direction: 'vertical',
+          cols: 2,
+          rows: 10,
+          options: ['0','1','2','3','4','5','6','7','8','9'],
+          prefillValue: '01'
+        },
+        // 6. Pilihan Ganda (PG Biasa: No. 1 - 12)
+        {
+          id: 6,
+          x: 90,
+          y: 735,
+          type: 'biasa',
+          title: 'PG Biasa',
+          direction: 'horizontal',
+          rows: 12,
+          options: ['A', 'B', 'C', 'D'],
+          startNum: 1
+        },
+        // 7. Benar / Salah (3 Baris) (BS 3 set: No. 13 - 15)
+        {
+          id: 7,
+          x: 310,
+          y: 735,
+          type: 'bs3',
+          title: 'BS (3 set)',
+          direction: 'horizontal',
+          rows: 3,
+          options: ['B', 'S'],
+          startNum: 13
+        },
+        // 8. Benar / Salah (3 Baris) (BS 3 set: No. 16 - 18)
+        {
+          id: 8,
+          x: 485,
+          y: 735,
+          type: 'bs3',
+          title: 'BS (3 set)',
+          direction: 'horizontal',
+          rows: 3,
+          options: ['B', 'S'],
+          startNum: 16
+        },
+        // 9. Pilihan Ganda Kompleks (PG Kompleks: No. 19 - 24)
+        {
+          id: 9,
+          x: 680,
+          y: 735,
+          type: 'kompleks',
+          title: 'PG Kompleks',
+          direction: 'horizontal',
+          rows: 6,
+          options: ['A', 'B', 'C', 'D'],
+          startNum: 19
+        },
+        // 10. Menjodohkan (No. 25 - 27)
+        {
+          id: 10,
+          x: 90,
+          y: 1135,
+          type: 'jodoh',
+          title: 'Menjodohkan',
+          direction: 'horizontal',
+          rows: 3,
+          options: ['A', 'B', 'C', 'D'],
+          startNum: 25
+        },
+        // 11. Menjodohkan (No. 28 - 30)
+        {
+          id: 11,
+          x: 310,
+          y: 1135,
+          type: 'jodoh',
+          title: 'Menjodohkan',
+          direction: 'horizontal',
+          rows: 3,
+          options: ['A', 'B', 'C', 'D'],
+          startNum: 28
+        },
+        // 12. Catatan / Keterangan
+        {
+          id: 12,
+          x: 565,
+          y: 1135,
+          type: 'teks_kustom',
+          title: 'Catatan',
+          direction: 'teks',
+          cols: 345,
+          rows: 115,
+          prefillValue: 'Jaga lembar jawaban agar tidak terlipat, basah, robek, atau kotor, serta pastikan tidak ada coretan lain agar lembar ujianmu terbaca sempurna oleh mesin pemindai.'
+        }
       ]
     };
     tpl.blocks.forEach(b => {
@@ -86,8 +219,33 @@ export const useOmrStore = defineStore('omr', () => {
     return tpl;
   };
 
+  const getDefaultBlocks = (): TemplateBlock[] => [
+    { id: 1, x: 90, y: 135, type: 'handwritten_identity', title: 'Data Peserta', direction: 'handwritten', cols: 0, rows: 0, options: [], prefillValue: '' },
+    { id: 2, x: 90, y: 360, type: 'identity_nisn', title: 'NISN', direction: 'vertical', cols: 10, rows: 10, options: ['0','1','2','3','4','5','6','7','8','9'], prefillValue: '' },
+    { id: 3, x: 442, y: 360, type: 'identity_npsn', title: 'NPSN', direction: 'vertical', cols: 8, rows: 10, options: ['0','1','2','3','4','5','6','7','8','9'], prefillValue: '20301942' },
+    { id: 4, x: 725, y: 360, type: 'identity_subject', title: 'ID Mapel', direction: 'vertical', cols: 2, rows: 10, options: ['0','1','2','3','4','5','6','7','8','9'], prefillValue: '01' },
+    { id: 5, x: 820, y: 360, type: 'identity_test', title: 'Kode Tes', direction: 'vertical', cols: 2, rows: 10, options: ['0','1','2','3','4','5','6','7','8','9'], prefillValue: '01' }
+  ];
+
+  const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2);
+
+  const createCleanEmptyTemplate = (): OmrTemplate => {
+    const tpl: OmrTemplate = {
+      id: generateId(),
+      name: 'Lembar Jawaban Baru',
+      updatedAt: Date.now(),
+      blocks: getDefaultBlocks(),
+      autoLayout: true
+    };
+    tpl.blocks.forEach(b => {
+      b.bubbles = computeBlockBubbles(b);
+    });
+    return tpl;
+  };
+
   const savedTemplates = ref<OmrTemplate[]>([]);
-  const activeTemplate = ref<OmrTemplate>(createInitialTKATemplate());
+  // UX: Ketika menu desain dibuka pertama kali atau saat mulai baru, bagian soal TETAP KOSONG
+  const activeTemplate = ref<OmrTemplate>(createCleanEmptyTemplate());
   const snackbar = ref({ show: false, text: '', color: 'info' });
 
   const showToast = (text: string, color = 'info') => {
@@ -98,12 +256,20 @@ export const useOmrStore = defineStore('omr', () => {
     try {
       let data = await db.templates.orderBy('updatedAt').reverse().toArray();
 
-      // Pastikan templat inisiasi "Lembar Jawaban Latihan TKA" selalu tersedia di database
-      const tkaExists = data.some(t => t.name === 'Lembar Jawaban Latihan TKA' || t.id === 'tpl_latihan_tka');
-      if (!tkaExists) {
-        const initialTpl = createInitialTKATemplate();
+      // Pastikan templat inisiasi "Lembar Jawaban Latihan TKA 1" selalu tersedia di database koleksi
+      const tkaIdx = data.findIndex(t => t.name === 'Lembar Jawaban Latihan TKA 1' || t.name === 'Lembar Jawaban Latihan TKA' || t.id === 'tpl_latihan_tka');
+      const initialTpl = createInitialTKATemplate();
+
+      if (tkaIdx === -1) {
         await db.templates.put(initialTpl);
         data.unshift(initialTpl);
+      } else {
+        // Perbarui jika templat TKA lama masih memakai konfigurasi lama atau koordinat lama yang terlalu ke atas (y < 130)
+        const isOldCoordinates = data[tkaIdx].blocks[0] && data[tkaIdx].blocks[0].y < 130;
+        if (data[tkaIdx].blocks.length < 12 || data[tkaIdx].name !== 'Lembar Jawaban Latihan TKA 1' || isOldCoordinates) {
+          await db.templates.put(initialTpl);
+          data[tkaIdx] = initialTpl;
+        }
       }
 
       const migratedData = data.map(template => {
@@ -117,14 +283,20 @@ export const useOmrStore = defineStore('omr', () => {
             block.title = 'Kode Tes';
             templateChanged = true;
           }
+          if (block.type === 'teks_kustom' && block.title === 'Teks Info') {
+            block.title = 'Catatan';
+            templateChanged = true;
+          }
           const titleMap: Record<string, string> = {
-            'Pilihan Ganda': 'PG',
-            'Pilihan Ganda Kompleks': 'PGK',
-            'Benar / Salah': 'B / S',
-            'Benar / Salah (3 Baris)': 'B/S (3B)',
+            'Pilihan Ganda': 'PG Biasa',
+            'Pilihan Ganda Kompleks': 'PG Kompleks',
+            'Benar / Salah': 'BS (1 set)',
+            'Benar / Salah (3 Baris)': 'BS (3 set)',
             'Sesuai / Tak Sesuai': 'S / TS',
             'Skala Kuesioner': 'Skala',
-            'Menjodohkan': 'Jodoh'
+            'Jodohkan': 'Menjodohkan',
+            'Jodoh': 'Menjodohkan',
+            'Teks Info': 'Catatan'
           };
           if (titleMap[block.title]) {
             block.title = titleMap[block.title];
@@ -142,12 +314,9 @@ export const useOmrStore = defineStore('omr', () => {
       });
       savedTemplates.value = migratedData;
 
-      // Jika activeTemplate belum terisi atau masih bawaan lama tanpa soal, arahkan ke TKA template
-      if (!activeTemplate.value.id || activeTemplate.value.name === 'Lembar Jawaban' || activeTemplate.value.blocks.length <= 5) {
-        const tkaTpl = migratedData.find(t => t.name === 'Lembar Jawaban Latihan TKA') || migratedData[0];
-        if (tkaTpl) {
-          activeTemplate.value = JSON.parse(JSON.stringify(tkaTpl));
-        }
+      // PENTING UNTUK UX: Jika activeTemplate belum diset atau memakai koordinat lama yang terlalu ke atas, perbarui
+      if (!activeTemplate.value.id || (activeTemplate.value.blocks?.[0] && activeTemplate.value.blocks[0].y < 130)) {
+        activeTemplate.value = createCleanEmptyTemplate();
       }
     } catch (error: any) {
       showToast(`Gagal memuat templat: ${error.message}`, 'error');
@@ -182,28 +351,25 @@ export const useOmrStore = defineStore('omr', () => {
     }
   };
 
-  const getDefaultBlocks = (): TemplateBlock[] => [
-    { id: 1, x: 90, y: 150, type: 'handwritten_identity', title: 'Data Peserta', direction: 'handwritten', cols: 0, rows: 0, options: [], prefillValue: '' },
-    { id: 2, x: 90, y: 390, type: 'identity_nisn', title: 'NISN', direction: 'vertical', cols: 10, rows: 10, options: ['0','1','2','3','4','5','6','7','8','9'], prefillValue: '' },
-    { id: 3, x: 442, y: 390, type: 'identity_npsn', title: 'NPSN', direction: 'vertical', cols: 8, rows: 10, options: ['0','1','2','3','4','5','6','7','8','9'], prefillValue: '20301942' },
-    { id: 4, x: 730, y: 390, type: 'identity_subject', title: 'ID Mapel', direction: 'vertical', cols: 2, rows: 10, options: ['0','1','2','3','4','5','6','7','8','9'], prefillValue: '' },
-    { id: 5, x: 826, y: 390, type: 'identity_test', title: 'Kode Tes', direction: 'vertical', cols: 2, rows: 10, options: ['0','1','2','3','4','5','6','7','8','9'], prefillValue: '' }
-  ];
-
-  const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2);
-
   const createNewTemplate = () => {
-    activeTemplate.value = {
-      id: generateId(),
-      name: 'Lembar Jawaban',
-      updatedAt: Date.now(),
-      blocks: getDefaultBlocks(),
-      autoLayout: true
-    };
+    activeTemplate.value = createCleanEmptyTemplate();
   };
 
   const openTemplate = (templateData: OmrTemplate) => {
-    activeTemplate.value = JSON.parse(JSON.stringify(templateData));
+    const cloned = JSON.parse(JSON.stringify(templateData));
+    cloned.blocks.forEach((b: TemplateBlock) => {
+      b.bubbles = computeBlockBubbles(b);
+    });
+    activeTemplate.value = cloned;
+  };
+
+  const clearQuestionBlocks = () => {
+    const identityTypes = ['handwritten_identity', 'identity_nisn', 'identity_npsn', 'identity_subject', 'identity_test'];
+    activeTemplate.value.blocks = activeTemplate.value.blocks.filter(b => identityTypes.includes(b.type));
+    activeTemplate.value.blocks.forEach(b => {
+      b.bubbles = computeBlockBubbles(b);
+    });
+    showToast('Bagian soal berhasil dikosongkan.', 'info');
   };
 
   return {
@@ -216,6 +382,10 @@ export const useOmrStore = defineStore('omr', () => {
     saveTemplate,
     deleteTemplate,
     createNewTemplate,
+    createInitialTKATemplate,
+    createCleanEmptyTemplate,
+    clearQuestionBlocks,
     openTemplate
   };
 });
+

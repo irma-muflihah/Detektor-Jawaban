@@ -166,9 +166,10 @@ Petunjuk Khusus:
    - Periksa setiap butir nomor soal.
    - Deteksi bulatan yang dihitamkan (pensil 2B, pulpen, arsiran jelas).
    - Abaikan bulatan kosong.
-   - Untuk tipe 'pg' (pilihan ganda) atau 'bs': masukkan 1 opsi yang dipilih, misal ["A"] atau ["B"]. Jika tidak ada yang diisi, kosongkan array jawaban: [].
+   - Untuk tipe 'pg' (pilihan ganda biasa), 'bs' (benar/salah), atau 'yt' (ya/tidak): masukkan 1 opsi yang dipilih, misal ["A"], ["B"], atau ["Y"]. Jika tidak ada yang diisi, kosongkan array jawaban: [].
    - Untuk tipe 'kompleks': masukkan semua opsi yang dipilih, misal ["A", "C"].
-   - Untuk tipe 'bs3': masukkan opsi terisi per sub-pernyataan (panjang 3), misal ["B", "S", "B"].
+   - Untuk tipe 'bs3' (BS 3 baris) atau 'yt3' (YT 3 baris): masukkan opsi terisi per sub-pernyataan (panjang 3), misal ["B", "S", "B"] atau ["Y", "T", "Y"].
+   - Untuk tipe 'jodoh' (menjodohkan) atau 'skala': masukkan opsi yang dipilih per nomor.
 5. Kembalikan confidence_score (0.0 - 1.0) dan scan_notes catatan singkat tentang kualitas gambar/pengisian.`;
 
     const responseSchema = {
@@ -214,12 +215,12 @@ Petunjuk Khusus:
               },
               bentuk_soal: {
                 type: Type.STRING,
-                description: "Bentuk soal: pg, bs, bs3, atau kompleks",
+                description: "Bentuk soal: pg, kompleks, bs, bs3, yt, yt3, skala, atau jodoh",
               },
               jawaban: {
                 type: Type.ARRAY,
                 items: { type: Type.STRING },
-                description: "Daftar opsi yang dihitamkan (misal ['A'] atau ['A','C'] atau ['B','S','B'])",
+                description: "Daftar opsi yang dihitamkan (misal ['A'] atau ['A','C'] atau ['B','S','B'] atau ['Y','T','Y'])",
               },
             },
             required: ["nomor_soal", "bentuk_soal", "jawaban"],
