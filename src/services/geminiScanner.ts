@@ -11,8 +11,6 @@ export interface GeminiOmrResultData {
   kelas?: string;
   no_peserta?: string;
   tanggal_ujian?: string;
-  pernyataan_kejujuran?: string;
-  tanda_tangan_terisi?: boolean;
   confidence_score: number;
   scan_notes?: string;
   answers: Array<{

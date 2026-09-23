@@ -43,8 +43,6 @@ export interface ScanResult {
   kelas?: string;
   no_peserta?: string;
   tanggal_ujian?: string;
-  pernyataan_kejujuran?: string;
-  tanda_tangan_terisi?: boolean;
   confidence_score?: number;
   scan_notes?: string;
   engine?: string;
@@ -61,17 +59,57 @@ export interface ScoreResult {
   isKey?: boolean;
 }
 
+// Normalized Vector ROI types for resolution-independent scaling
+export interface NormalizedBubbleROI {
+  id: string;
+  normX: number; // 0.0 to 1.0 (cx / sheetWidth)
+  normY: number; // 0.0 to 1.0 (cy / sheetHeight)
+  normR: number; // radius / sheetWidth
+  value: string;
+  isBox?: boolean;
+  blockId: string | number;
+  blockType: string;
+}
+
+export interface NormalizedFieldROI {
+  key: 'nama_lengkap' | 'kelas' | 'no_peserta' | 'tanggal_pelaksanaan';
+  label: string;
+  normX: number; // x / sheetWidth
+  normY: number; // y / sheetHeight
+  normWidth: number; // width / sheetWidth
+  normHeight: number; // height / sheetHeight
+}
+
+export interface TemplateRoiRecord {
+  id: string;
+  templateId: string;
+  type: 'baseline' | 'ai_calibrated' | 'resultant';
+  vectorRois: NormalizedBubbleROI[];
+  handwrittenFields?: NormalizedFieldROI[];
+  sampleCount?: number;
+  confidence?: number;
+  metadata?: {
+    modelName?: string;
+    imageWidth?: number;
+    imageHeight?: number;
+    notes?: string;
+  };
+  createdAt: number;
+}
+
 export class OMREnterpriseDB extends Dexie {
   templates!: Table<OmrTemplate, string>;
   scanResults!: Table<ScanResult, [string, string, string, string]>;
   scoreResults!: Table<ScoreResult, [string, string, string, string]>;
+  templateRois!: Table<TemplateRoiRecord, string>;
 
   constructor() {
     super('OMREnterpriseDB');
-    this.version(3).stores({
+    this.version(4).stores({
       templates: 'id, name, updatedAt',
       scanResults: '[npsn+id_mapel+kode_tes+nisn], scannedAt',
-      scoreResults: '[npsn+id_mapel+kode_tes+nisn], scoredAt'
+      scoreResults: '[npsn+id_mapel+kode_tes+nisn], scoredAt',
+      templateRois: 'id, templateId, type, createdAt'
     });
   }
 }

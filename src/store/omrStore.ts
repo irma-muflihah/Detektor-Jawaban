@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { db, type OmrTemplate, type TemplateBlock, type BubbleROI } from '../db/database';
+import { saveBaselineRoi } from '../utils/roiVectorService';
 import { ref } from 'vue';
 
 export const useOmrStore = defineStore('omr', () => {
@@ -314,6 +315,16 @@ export const useOmrStore = defineStore('omr', () => {
       });
       savedTemplates.value = migratedData;
 
+      // Inisialisasi baseline ROI di latar belakang untuk setiap templat jika belum tersedia
+      migratedData.forEach(async (tpl) => {
+        try {
+          const exists = await db.templateRois.get(`${tpl.id}_baseline`);
+          if (!exists) {
+            await saveBaselineRoi(tpl);
+          }
+        } catch (_) {}
+      });
+
       // PENTING UNTUK UX: Jika activeTemplate belum diset atau memakai koordinat lama yang terlalu ke atas, perbarui
       if (!activeTemplate.value.id || (activeTemplate.value.blocks?.[0] && activeTemplate.value.blocks[0].y < 130)) {
         activeTemplate.value = createCleanEmptyTemplate();
@@ -334,6 +345,8 @@ export const useOmrStore = defineStore('omr', () => {
       });
       
       await db.templates.put(templateData);
+      // Simpan juga ROI Vektor Baseline secara otomatis
+      await saveBaselineRoi(templateData);
       showToast(`Tersimpan: ${activeTemplate.value.name}`, 'success');
       await loadTemplatesFromDB();
     } catch (error: any) {

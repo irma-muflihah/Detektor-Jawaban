@@ -180,13 +180,12 @@ Tugas Anda: Pindai gambar LJK terlampir dan ekstrak seluruh data peserta (tulisa
 ${templateContext}
 
 Petunjuk Khusus Ekstraksi:
-1. Data Peserta (OCR Tulisan Tangan pada Blok Data Peserta di bagian atas):
+1. Data Peserta Esensial (OCR Tulisan Tangan pada Blok Data Peserta di bagian atas):
    - nama_siswa: Nama lengkap siswa dari kotak tulisan tangan "Nama Lengkap" (contoh: "Kanza Aditya").
    - kelas: Kelas siswa dari kotak isian "Kelas" (contoh: "8C").
    - no_peserta: Nomor peserta dari kotak isian "No. Peserta" (contoh: "01-8C-14").
    - tanggal_ujian: Tanggal pelaksanaan dari kotak isian "Tanggal Pelaksanaan Tes" (contoh: "23 - September - 2026").
-   - pernyataan_kejujuran: Kalimat pernyataan yang disalin/ditulis siswa pada kotak "Pernyataan Kejujuran" (contoh: "Saya mengerjakan tes dengan jujur").
-   - tanda_tangan_terisi: Nilai boolean (true jika ada goresan tanda tangan / paraf pada kotak "Tanda Tangan", false jika kosong).
+   (Catatan penting: Blok catatan, teks pernyataan kejujuran, dan tanda tangan/paraf diabaikan saja).
 
 2. Blok Identitas Digital (Cross-Validation Antara Kotak Angka Atas dan Bulatan 0-9 di Bawahnya):
    - NISN (10 digit): Periksa angka yang tertulis di dalam kotak 1-10 DAN bulatan angka 0-9 yang dihitamkan di kolom bawahnya. Lakukan verifikasi silang (cross-validation) agar 10 digit angka yang dihasilkan tepat 100%.
@@ -241,14 +240,6 @@ Petunjuk Khusus Ekstraksi:
         tanggal_ujian: {
           type: Type.STRING,
           description: "Tanggal pelaksanaan ujian dari tulisan tangan (misal: '23 - September - 2026')",
-        },
-        pernyataan_kejujuran: {
-          type: Type.STRING,
-          description: "Isi kalimat tulisan tangan pada kotak pernyataan kejujuran",
-        },
-        tanda_tangan_terisi: {
-          type: Type.BOOLEAN,
-          description: "Apakah kotak tanda tangan terisi goresan tanda tangan/paraf (true/false)",
         },
         confidence_score: {
           type: Type.NUMBER,

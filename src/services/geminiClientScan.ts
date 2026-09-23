@@ -63,13 +63,12 @@ Tugas Anda: Pindai gambar LJK terlampir dan ekstrak seluruh data peserta (tulisa
 ${templateContext}
 
 Petunjuk Khusus Ekstraksi:
-1. Data Peserta (OCR Tulisan Tangan pada Blok Data Peserta di bagian atas):
+1. Data Peserta Esensial (OCR Tulisan Tangan pada Blok Data Peserta di bagian atas):
    - nama_siswa: Nama lengkap siswa dari kotak tulisan tangan "Nama Lengkap" (contoh: "Kanza Aditya").
    - kelas: Kelas siswa dari kotak isian "Kelas" (contoh: "8C").
    - no_peserta: Nomor peserta dari kotak isian "No. Peserta" (contoh: "01-8C-14").
    - tanggal_ujian: Tanggal pelaksanaan dari kotak isian "Tanggal Pelaksanaan Tes" (contoh: "23 - September - 2026").
-   - pernyataan_kejujuran: Kalimat pernyataan yang disalin/ditulis siswa pada kotak "Pernyataan Kejujuran" (contoh: "Saya mengerjakan tes dengan jujur").
-   - tanda_tangan_terisi: Nilai boolean (true jika ada goresan tanda tangan / paraf pada kotak "Tanda Tangan", false jika kosong).
+   (Catatan penting: Blok catatan, teks pernyataan kejujuran, dan tanda tangan/paraf diabaikan saja).
 
 2. Blok Identitas Digital (Cross-Validation Antara Kotak Angka Atas dan Bulatan 0-9 di Bawahnya):
    - NISN (10 digit): Periksa angka yang tertulis di dalam kotak 1-10 DAN bulatan angka 0-9 yang dihitamkan di kolom bawahnya. Lakukan verifikasi silang (cross-validation) agar 10 digit angka yang dihasilkan tepat 100%.
@@ -101,8 +100,6 @@ Petunjuk Khusus Ekstraksi:
       kelas: { type: Type.STRING, description: "Kelas siswa dari tulisan tangan" },
       no_peserta: { type: Type.STRING, description: "Nomor peserta ujian dari tulisan tangan" },
       tanggal_ujian: { type: Type.STRING, description: "Tanggal pelaksanaan ujian dari tulisan tangan" },
-      pernyataan_kejujuran: { type: Type.STRING, description: "Isi kalimat tulisan tangan pernyataan kejujuran" },
-      tanda_tangan_terisi: { type: Type.BOOLEAN, description: "Apakah kotak tanda tangan terisi paraf/tanda tangan" },
       confidence_score: { type: Type.NUMBER, description: "Skor keyakinan pemindaian antara 0.0 sampai 1.0" },
       scan_notes: { type: Type.STRING, description: "Catatan hasil pemindaian dan evaluasi visual LJK" },
       answers: {
@@ -175,8 +172,6 @@ Petunjuk Khusus Ekstraksi:
     kelas: parsed.kelas ? String(parsed.kelas).trim() : undefined,
     no_peserta: parsed.no_peserta ? String(parsed.no_peserta).trim() : undefined,
     tanggal_ujian: parsed.tanggal_ujian ? String(parsed.tanggal_ujian).trim() : undefined,
-    pernyataan_kejujuran: parsed.pernyataan_kejujuran ? String(parsed.pernyataan_kejujuran).trim() : undefined,
-    tanda_tangan_terisi: typeof parsed.tanda_tangan_terisi === 'boolean' ? parsed.tanda_tangan_terisi : undefined,
     confidence_score: typeof parsed.confidence_score === 'number' ? parsed.confidence_score : 0.95,
     scan_notes: parsed.scan_notes || `Dipindai dengan model ${selectedModel} (Client SDK).`,
     answers: formattedAnswers,

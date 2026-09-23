@@ -146,6 +146,44 @@
                     class="ml-2"
                   ></v-switch>
                 </div>
+
+                <!-- Kontrol Kalibrasi ROI Vektor Berbasis Gemini AI -->
+                <div class="w-100 mt-2 pt-2 border-t d-flex align-center flex-wrap justify-space-between gap-2">
+                  <div class="d-flex align-center gap-2 flex-wrap">
+                    <v-switch
+                      v-model="enableAiCalibration"
+                      color="secondary"
+                      density="compact"
+                      hide-details
+                      label="Kalibrasi ROI dengan AI"
+                      title="Setiap scan sukses oleh Gemini AI akan menyempurnakan posisi ROI vektor untuk OpenCV"
+                    ></v-switch>
+
+                    <v-chip
+                      size="small"
+                      :color="calibrationSampleCount > 0 ? 'secondary' : 'grey-darken-1'"
+                      variant="tonal"
+                      class="font-weight-bold"
+                      prepend-icon="mdi-target"
+                    >
+                      {{ calibrationSampleCount > 0 ? `Terkalibrasi: ${calibrationSampleCount} Sampel AI (Resultan Presisi)` : 'ROI Vektor Baseline' }}
+                    </v-chip>
+                  </div>
+
+                  <div class="d-flex align-center gap-1">
+                    <v-btn
+                      v-if="calibrationSampleCount > 0"
+                      size="x-small"
+                      color="error"
+                      variant="text"
+                      prepend-icon="mdi-refresh"
+                      @click="handleResetCalibration"
+                      title="Kembalikan ROI ke baseline awal perancang"
+                    >
+                      Reset Kalibrasi
+                    </v-btn>
+                  </div>
+                </div>
               </div>
 
               <!-- Horizontal Mode Selection (Kamera / Batch) -->
@@ -351,17 +389,8 @@
 
             <!-- Identity Grid (OCR Tulisan Tangan & OMR Digital) -->
             <div class="bg-white rounded-lg border pa-3">
-              <div class="text-caption font-weight-bold text-grey-darken-2 mb-2 text-uppercase d-flex align-center justify-space-between">
-                <span>Profil Peserta (OCR Tulisan Tangan)</span>
-                <v-chip
-                  size="x-small"
-                  :color="pendingAiResult.tanda_tangan_terisi ? 'success' : 'warning'"
-                  variant="flat"
-                  class="font-weight-bold"
-                >
-                  <v-icon start :icon="pendingAiResult.tanda_tangan_terisi ? 'mdi-draw' : 'mdi-draw-pen'"></v-icon>
-                  {{ pendingAiResult.tanda_tangan_terisi ? 'Tanda Tangan Terisi' : 'Tanda Tangan Belum Terdeteksi' }}
-                </v-chip>
+              <div class="text-caption font-weight-bold text-grey-darken-2 mb-2 text-uppercase">
+                Profil Peserta (OCR Tulisan Tangan Esensial)
               </div>
               <v-row dense>
                 <v-col cols="12" sm="6">
@@ -405,17 +434,6 @@
                     density="compact"
                     placeholder="Contoh: 23 - September - 2026"
                     prepend-inner-icon="mdi-calendar-check"
-                    hide-details
-                  ></v-text-field>
-                </v-col>
-                <v-col cols="12" sm="6">
-                  <v-text-field
-                    v-model="pendingAiResult.pernyataan_kejujuran"
-                    label="Pernyataan Kejujuran"
-                    variant="outlined"
-                    density="compact"
-                    placeholder="Saya mengerjakan tes dengan jujur"
-                    prepend-inner-icon="mdi-format-quote-close"
                     hide-details
                   ></v-text-field>
                 </v-col>
@@ -524,9 +542,16 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useOmrStore } from '../store/omrStore';
-import { db, type ScanResult } from '../db/database';
+import { db, type ScanResult, type NormalizedBubbleROI } from '../db/database';
 import { scanWithGemini, checkGeminiHealth, type GeminiOmrResultData } from '../services/geminiScanner';
 import { getStoredModel, GEMINI_MODEL_PRESETS, DEFAULT_GEMINI_MODEL } from '../services/geminiKeyService';
+import {
+  getTemplateRoisForScanning,
+  calibrateVectorRoisFromScan,
+  recordCalibrationSample,
+  resetTemplateCalibration
+} from '../utils/roiVectorService';
+import { recognizeEssentialHandwriting, terminateOcrWorker } from '../services/tesseractOcr';
 import GeminiSettingsDialog from '../components/GeminiSettingsDialog.vue';
 
 const omrStore = useOmrStore();
@@ -544,8 +569,38 @@ const previewBeforeSave = ref(true);
 const showAiPreviewDialog = ref(false);
 const showApiKeyDialog = ref(false);
 const pendingAiResult = ref<GeminiOmrResultData | null>(null);
+const pendingImageUrl = ref<string>('');
 const geminiStatus = ref<{ status: string; hasGeminiKey: boolean }>({ status: 'checking', hasGeminiKey: false });
 const activeModel = ref<string>(getStoredModel());
+
+// State Kalibrasi ROI AI
+const enableAiCalibration = ref(true);
+const calibrationSampleCount = ref(0);
+const isCalibrating = ref(false);
+
+const refreshCalibrationInfo = async () => {
+  if (!selectedTemplateId.value) {
+    calibrationSampleCount.value = 0;
+    return;
+  }
+  try {
+    const rois = await getTemplateRoisForScanning(selectedTemplateId.value);
+    calibrationSampleCount.value = rois.totalSamples;
+  } catch (err) {
+    console.warn('Gagal memuat status kalibrasi:', err);
+  }
+};
+
+const handleResetCalibration = async () => {
+  if (!selectedTemplateId.value) return;
+  try {
+    await resetTemplateCalibration(selectedTemplateId.value);
+    await refreshCalibrationInfo();
+    omrStore.showToast('Data kalibrasi templat berhasil direset ke baseline awal.', 'info');
+  } catch (err: any) {
+    omrStore.showToast('Gagal mereset kalibrasi: ' + err.message, 'error');
+  }
+};
 
 const activeModelLabel = computed(() => {
   const modelId = activeModel.value;
@@ -622,8 +677,9 @@ const selectedTemplate = computed(() => {
   return omrStore.savedTemplates.find(t => t.id === selectedTemplateId.value);
 });
 
-const selectTemplate = (id: string) => {
+const selectTemplate = async (id: string) => {
   selectedTemplateId.value = id;
+  await refreshCalibrationInfo();
   step.value = 2;
 };
 
@@ -634,6 +690,7 @@ const goToStep3 = () => {
 
 onMounted(async () => {
   await omrStore.loadTemplatesFromDB();
+  await refreshCalibrationInfo();
 
   // Check Gemini status
   checkGeminiHealth().then(status => {
@@ -651,6 +708,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   stopCamera();
+  terminateOcrWorker();
 });
 
 watch(scanMode, (newVal) => {
@@ -706,193 +764,417 @@ const captureImageFromVideo = (): string => {
   return canvas.toDataURL('image/jpeg', 0.92);
 };
 
-// Simulated AI Image Processing
-const processOMRImage = async (imageSource: HTMLImageElement | HTMLVideoElement): Promise<any> => {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      if (!cvReady.value) {
-        reject(new Error("OpenCV belum siap."));
-        return;
+// Transformasi perspektif homografi (4 sudut lembar LJK)
+const rectifyLjkSheet = (srcMat: any, cv: any, targetW = 1000, targetH = 1414): any => {
+  let gray = new cv.Mat();
+  let blur = new cv.Mat();
+  let edges = new cv.Mat();
+  let contours = new cv.MatVector();
+  let hierarchy = new cv.Mat();
+
+  try {
+    cv.cvtColor(srcMat, gray, cv.COLOR_RGBA2GRAY, 0);
+    cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0);
+    cv.Canny(blur, edges, 50, 150);
+
+    cv.findContours(edges, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+
+    let maxArea = 0;
+    let bestPoly: any = null;
+    const minArea = srcMat.rows * srcMat.cols * 0.20;
+
+    for (let i = 0; i < contours.size(); i++) {
+      const cnt = contours.get(i);
+      const area = cv.contourArea(cnt);
+      if (area > minArea && area > maxArea) {
+        const peri = cv.arcLength(cnt, true);
+        const approx = new cv.Mat();
+        cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
+        if (approx.rows === 4) {
+          maxArea = area;
+          if (bestPoly) bestPoly.delete();
+          bestPoly = approx;
+        } else {
+          approx.delete();
+        }
       }
-      
-      const cv = (window as any).cv;
-      let src = new cv.Mat();
-      let gray = new cv.Mat();
-      let thresh = new cv.Mat();
+      cnt.delete();
+    }
 
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = 1000;
-        canvas.height = 1414;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) throw new Error("Canvas context failed");
-        
-        ctx.drawImage(imageSource, 0, 0, canvas.width, canvas.height);
-        
-        src = cv.imread(canvas);
-        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
-        cv.threshold(gray, thresh, 150, 255, cv.THRESH_BINARY_INV);
+    const rectified = new cv.Mat();
 
-        let npsn = '';
-        let id_mapel = '';
-        let kode_tes = '';
-        let nisn = '';
-        let answers: any[] = [];
+    if (bestPoly) {
+      const pts: Array<{ x: number; y: number }> = [];
+      for (let i = 0; i < 4; i++) {
+        pts.push({ x: bestPoly.data32S[i * 2], y: bestPoly.data32S[i * 2 + 1] });
+      }
+      bestPoly.delete();
 
-        const template = selectedTemplate.value;
-        if (!template) {
-          throw new Error("Template tidak ditemukan.");
+      pts.sort((a, b) => a.y - b.y);
+      const topPts = [pts[0], pts[1]].sort((a, b) => a.x - b.x);
+      const botPts = [pts[2], pts[3]].sort((a, b) => a.x - b.x);
+      const sorted = [topPts[0], topPts[1], botPts[1], botPts[0]]; // TL, TR, BR, BL
+
+      const srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+        sorted[0].x, sorted[0].y,
+        sorted[1].x, sorted[1].y,
+        sorted[2].x, sorted[2].y,
+        sorted[3].x, sorted[3].y
+      ]);
+
+      const dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+        0, 0,
+        targetW, 0,
+        targetW, targetH,
+        0, targetH
+      ]);
+
+      const M = cv.getPerspectiveTransform(srcTri, dstTri);
+      cv.warpPerspective(srcMat, rectified, M, new cv.Size(targetW, targetH), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar(255, 255, 255, 255));
+
+      srcTri.delete();
+      dstTri.delete();
+      M.delete();
+    } else {
+      cv.resize(srcMat, rectified, new cv.Size(targetW, targetH), 0, 0, cv.INTER_LINEAR);
+    }
+
+    return rectified;
+  } finally {
+    gray.delete();
+    blur.delete();
+    edges.delete();
+    contours.delete();
+    hierarchy.delete();
+  }
+};
+
+// Evaluasi ekstraksi menggunakan set koordinat ROI vektor tertentu
+const evaluateExtractionWithVectorRoi = (
+  threshMat: any,
+  cv: any,
+  vectorRois: NormalizedBubbleROI[],
+  sheetW: number,
+  sheetH: number,
+  template: any
+): {
+  npsn: string;
+  id_mapel: string;
+  kode_tes: string;
+  nisn: string;
+  answers: any[];
+  contrastScore: number;
+} => {
+  let npsn = '';
+  let id_mapel = '';
+  let kode_tes = '';
+  let nisn = '';
+  let answers: any[] = [];
+
+  let totalContrastSum = 0;
+  let evaluatedItemsCount = 0;
+
+  template.blocks.forEach((block: any) => {
+    if (!block.bubbles || block.bubbles.length === 0) return;
+
+    if (block.direction === 'vertical') {
+      const cols = block.cols || 0;
+      const rows = block.rows || 10;
+      let resultString = '';
+
+      for (let c = 1; c <= cols; c++) {
+        let maxIntensity = 0;
+        let secondIntensity = 0;
+        let selectedValue = '';
+
+        for (let r = 1; r <= rows; r++) {
+          const bubbleId = `${block.id}_col${c}_row${r}`;
+          const vBubble = vectorRois.find(b => b.id === bubbleId);
+          if (vBubble) {
+            const bx = Math.round(vBubble.normX * sheetW);
+            const by = Math.round(vBubble.normY * sheetH);
+            const br = Math.max(3, Math.round(vBubble.normR * sheetW));
+            const innerMargin = Math.max(2, Math.round(br * 0.35));
+            const innerSize = Math.max(4, br * 2 - innerMargin * 2);
+            const innerX = Math.max(0, Math.min(sheetW - innerSize, bx - br + innerMargin));
+            const innerY = Math.max(0, Math.min(sheetH - innerSize, by - br + innerMargin));
+
+            const rect = new cv.Rect(innerX, innerY, innerSize, innerSize);
+            const roi = threshMat.roi(rect);
+            const mean = cv.mean(roi);
+            roi.delete();
+
+            const intensity = mean[0];
+            if (intensity > maxIntensity) {
+              secondIntensity = maxIntensity;
+              maxIntensity = intensity;
+              selectedValue = vBubble.value;
+            } else if (intensity > secondIntensity) {
+              secondIntensity = intensity;
+            }
+          }
         }
 
-        template.blocks.forEach(block => {
-          if (!block.bubbles || block.bubbles.length === 0) return;
-          
-          if (block.direction === 'vertical') {
-            const cols = block.cols || 0;
-            const rows = block.rows || 10;
-            let resultString = '';
-            
-            for (let c = 1; c <= cols; c++) {
-              let maxIntensity = 0;
-              let selectedValue = '';
-              for (let r = 1; r <= rows; r++) {
-                const bubble = block.bubbles.find(b => b.id === `col${c}_row${r}`);
-                if (bubble) {
-                  const bSize = bubble.r * 2;
-                  const x = Math.max(0, Math.min(1000 - bSize, Math.round(bubble.cx - bubble.r)));
-                  const y = Math.max(0, Math.min(1414 - bSize, Math.round(bubble.cy - bubble.r)));
-                  
-                  // Ignore outer border by shrinking ROI by 6 pixels on all sides
-                  const innerSize = Math.max(4, bSize - 12);
-                  const innerX = x + 6;
-                  const innerY = y + 6;
-                  
-                  const rect = new cv.Rect(innerX, innerY, innerSize, innerSize);
-                  const roi = thresh.roi(rect);
-                  const mean = cv.mean(roi);
-                  roi.delete();
-                  
-                  if (mean[0] > maxIntensity) {
-                    maxIntensity = mean[0];
-                    selectedValue = bubble.value;
-                  }
-                }
+        const separation = Math.max(0, maxIntensity - secondIntensity) / 255.0;
+        totalContrastSum += separation;
+        evaluatedItemsCount++;
+
+        if (maxIntensity > 80) {
+          resultString += selectedValue;
+        } else {
+          resultString += '0';
+        }
+      }
+
+      if (block.type === 'identity_npsn') npsn = resultString;
+      else if (block.type === 'identity_subject') id_mapel = resultString;
+      else if (block.type === 'identity_test') kode_tes = resultString;
+      else if (block.type === 'identity_nisn') nisn = resultString;
+
+    } else if (block.direction === 'horizontal') {
+      const rows = block.rows || 1;
+      const opts = block.options || [];
+      const isTriple = block.type === 'bs3' || block.type === 'yt3';
+      const totalRows = isTriple ? rows * 3 : rows;
+      let tripleAnswers: { [key: number]: string[] } = {};
+
+      for (let r = 1; r <= totalRows; r++) {
+        const qNum = (block.startNum || 0) + (isTriple ? Math.floor((r - 1) / 3) : r - 1);
+        let selectedValues: string[] = [];
+        let maxIntensity = 0;
+        let secondIntensity = 0;
+        let selectedValue = '';
+
+        opts.forEach((_opt: string, oIdx: number) => {
+          const subId = isTriple ? `_sub${(r - 1) % 3}` : '';
+          const bubbleId = `${block.id}_q${qNum}${subId}_opt${oIdx}`;
+          const vBubble = vectorRois.find(b => b.id === bubbleId);
+
+          if (vBubble) {
+            const bx = Math.round(vBubble.normX * sheetW);
+            const by = Math.round(vBubble.normY * sheetH);
+            const br = Math.max(3, Math.round(vBubble.normR * sheetW));
+            const innerMargin = Math.max(2, Math.round(br * 0.35));
+            const innerSize = Math.max(4, br * 2 - innerMargin * 2);
+            const innerX = Math.max(0, Math.min(sheetW - innerSize, bx - br + innerMargin));
+            const innerY = Math.max(0, Math.min(sheetH - innerSize, by - br + innerMargin));
+
+            const rect = new cv.Rect(innerX, innerY, innerSize, innerSize);
+            const roi = threshMat.roi(rect);
+            const mean = cv.mean(roi);
+            roi.delete();
+
+            const intensity = mean[0];
+            if (block.type === 'kompleks') {
+              if (intensity > 85) {
+                selectedValues.push(vBubble.value);
               }
-              // Threshold 100 for clear distinction between filled and empty
-              if (maxIntensity > 100) {
-                resultString += selectedValue;
-              } else {
-                resultString += '0';
-              }
-            }
-            
-            if (block.type === 'identity_npsn') npsn = resultString;
-            else if (block.type === 'identity_subject') id_mapel = resultString;
-            else if (block.type === 'identity_test') kode_tes = resultString;
-            else if (block.type === 'identity_nisn') nisn = resultString;
-            
-          } else if (block.direction === 'horizontal') {
-            const rows = block.rows || 1;
-            const opts = block.options || [];
-            const isTriple = block.type === 'bs3' || block.type === 'yt3';
-            const totalRows = isTriple ? rows * 3 : rows;
-            let tripleAnswers: { [key: number]: string[] } = {};
-            
-            for (let r = 1; r <= totalRows; r++) {
-              const qNum = (block.startNum || 0) + (isTriple ? Math.floor((r-1)/3) : (r - 1));
-              let selectedValues: string[] = [];
-              let maxIntensity = 0;
-              let selectedValue = '';
-              
-              opts.forEach((_opt, oIdx) => {
-                const subId = isTriple ? `_sub${(r-1)%3}` : '';
-                const bubble = block.bubbles!.find(b => b.id === `q${qNum}${subId}_opt${oIdx}`);
-                if (bubble) {
-                  const bSize = block.type === 'kompleks' ? 20 : bubble.r * 2;
-                  const half = Math.round(bSize / 2);
-                  const x = Math.max(0, Math.min(1000 - bSize, Math.round(bubble.cx - half)));
-                  const y = Math.max(0, Math.min(1414 - bSize, Math.round(bubble.cy - half)));
-                  
-                  // Ignore outer border by shrinking ROI by 6 pixels on all sides
-                  const innerSize = Math.max(4, bSize - 12);
-                  const innerX = x + 6;
-                  const innerY = y + 6;
-                  
-                  const rect = new cv.Rect(innerX, innerY, innerSize, innerSize);
-                  const roi = thresh.roi(rect);
-                  const mean = cv.mean(roi);
-                  roi.delete();
-                  
-                  if (block.type === 'kompleks') {
-                    // Threshold 100 for clear distinction
-                    if (mean[0] > 100) {
-                      selectedValues.push(bubble.value);
-                    }
-                  } else {
-                    if (mean[0] > maxIntensity) {
-                      maxIntensity = mean[0];
-                      selectedValue = bubble.value;
-                    }
-                  }
-                }
-              });
-              
-              if (block.type === 'kompleks') {
-                answers.push({
-                  nomor_soal: qNum,
-                  bentuk_soal: block.type,
-                  jawaban: selectedValues.length > 0 ? selectedValues : []
-                });
-              } else if (isTriple) {
-                if (!tripleAnswers[qNum]) tripleAnswers[qNum] = [];
-                tripleAnswers[qNum].push(maxIntensity > 100 ? selectedValue : '-');
-              } else {
-                if (maxIntensity > 100) {
-                  answers.push({
-                    nomor_soal: qNum,
-                    bentuk_soal: block.type,
-                    jawaban: selectedValue
-                  });
-                } else {
-                  answers.push({
-                    nomor_soal: qNum,
-                    bentuk_soal: block.type,
-                    jawaban: '-' 
-                  });
-                }
-              }
-            }
-            
-            if (isTriple) {
-              for (const [qn, ansArr] of Object.entries(tripleAnswers)) {
-                answers.push({
-                  nomor_soal: Number(qn),
-                  bentuk_soal: block.type,
-                  jawaban: ansArr
-                });
+            } else {
+              if (intensity > maxIntensity) {
+                secondIntensity = maxIntensity;
+                maxIntensity = intensity;
+                selectedValue = vBubble.value;
+              } else if (intensity > secondIntensity) {
+                secondIntensity = intensity;
               }
             }
           }
         });
 
-        src.delete();
-        gray.delete();
-        thresh.delete();
-
-        if (!npsn || npsn.replace(/0/g, '').length === 0) {
-          throw new Error("NPSN tidak terdeteksi pada LJK.");
+        if (block.type !== 'kompleks') {
+          const separation = Math.max(0, maxIntensity - secondIntensity) / 255.0;
+          totalContrastSum += separation;
+          evaluatedItemsCount++;
         }
-        
-        resolve({ npsn, id_mapel, kode_tes, nisn, answers });
 
-      } catch (e: any) {
-        if (src && !src.isDeleted()) src.delete();
-        if (gray && !gray.isDeleted()) gray.delete();
-        if (thresh && !thresh.isDeleted()) thresh.delete();
-        reject(new Error("Error saat memproses gambar: " + e.message));
+        if (block.type === 'kompleks') {
+          answers.push({
+            nomor_soal: qNum,
+            bentuk_soal: block.type,
+            jawaban: selectedValues.length > 0 ? selectedValues : []
+          });
+        } else if (isTriple) {
+          if (!tripleAnswers[qNum]) tripleAnswers[qNum] = [];
+          tripleAnswers[qNum].push(maxIntensity > 85 ? selectedValue : '-');
+        } else {
+          answers.push({
+            nomor_soal: qNum,
+            bentuk_soal: block.type,
+            jawaban: maxIntensity > 85 ? selectedValue : '-'
+          });
+        }
       }
-    }, 50);
+
+      if (isTriple) {
+        for (const [qn, ansArr] of Object.entries(tripleAnswers)) {
+          answers.push({
+            nomor_soal: Number(qn),
+            bentuk_soal: block.type,
+            jawaban: ansArr
+          });
+        }
+      }
+    }
   });
+
+  const contrastScore = evaluatedItemsCount > 0 ? totalContrastSum / evaluatedItemsCount : 0.5;
+  return { npsn, id_mapel, kode_tes, nisn, answers, contrastScore };
+};
+
+// Pemrosesan OMR Citra OpenCV + Homografi + Skala ROI Vektor + Multi-ROI Iteration + Tesseract OCR
+const processOMRImage = async (imageSource: HTMLImageElement | HTMLVideoElement): Promise<any> => {
+  if (!cvReady.value) {
+    throw new Error("OpenCV belum siap.");
+  }
+
+  const template = selectedTemplate.value;
+  if (!template) {
+    throw new Error("Template tidak ditemukan.");
+  }
+
+  const cv = (window as any).cv;
+  let rawCanvas = document.createElement('canvas');
+  const naturalW = (imageSource as any).naturalWidth || (imageSource as any).videoWidth || 1280;
+  const naturalH = (imageSource as any).naturalHeight || (imageSource as any).videoHeight || 720;
+  rawCanvas.width = naturalW;
+  rawCanvas.height = naturalH;
+  const rawCtx = rawCanvas.getContext('2d');
+  if (!rawCtx) throw new Error("Gagal menginisialisasi kanvas sumber");
+  rawCtx.drawImage(imageSource, 0, 0, naturalW, naturalH);
+
+  let src = cv.imread(rawCanvas);
+  let rectifiedMat: any = null;
+  let gray = new cv.Mat();
+  let thresh = new cv.Mat();
+
+  try {
+    // 1. Transformasi homografi ke rasio A4 tegak lurus
+    rectifiedMat = rectifyLjkSheet(src, cv, 1000, 1414);
+
+    // 2. Buat rectified canvas untuk Tesseract OCR tulisan tangan esensial
+    const rectifiedCanvas = document.createElement('canvas');
+    rectifiedCanvas.width = 1000;
+    rectifiedCanvas.height = 1414;
+    cv.imshow(rectifiedCanvas, rectifiedMat);
+
+    // 3. Thresholding biner inversi untuk OMR
+    cv.cvtColor(rectifiedMat, gray, cv.COLOR_RGBA2GRAY, 0);
+    cv.threshold(gray, thresh, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+
+    // 4. Ambil koleksi ROI vektor dari Dexie (Resultan, Sampel Kalibrasi AI, Baseline)
+    const roiPackage = await getTemplateRoisForScanning(template.id);
+    const candidateRois: Array<{ name: string; vectorRois: NormalizedBubbleROI[] }> = [];
+
+    if (roiPackage.resultant && roiPackage.resultant.vectorRois?.length > 0) {
+      candidateRois.push({ name: 'Resultan Kalibrasi', vectorRois: roiPackage.resultant.vectorRois });
+    }
+    // Tambahkan sampel kalibrasi jika resultan kurang memuaskan
+    roiPackage.samples.forEach((s, idx) => {
+      if (s.vectorRois?.length > 0) {
+        candidateRois.push({ name: `Sampel AI #${idx + 1}`, vectorRois: s.vectorRois });
+      }
+    });
+    if (roiPackage.baseline && roiPackage.baseline.vectorRois?.length > 0) {
+      candidateRois.push({ name: 'Baseline Desain', vectorRois: roiPackage.baseline.vectorRois });
+    }
+
+    if (candidateRois.length === 0) {
+      throw new Error("Data ROI vektor templat belum tersedia di basis data.");
+    }
+
+    // 5. Ekstraksi dengan strategi Multi-ROI: coba resultan terlebih dahulu, fallback ke sampel terbaik jika perlu
+    let bestResult: any = null;
+    let highestScore = -1;
+
+    for (let i = 0; i < candidateRois.length; i++) {
+      const candidate = candidateRois[i];
+      const res = evaluateExtractionWithVectorRoi(thresh, cv, candidate.vectorRois, 1000, 1414, template);
+
+      // Beri bobot bonus jika NPSN dan NISN terisi
+      const hasValidId = res.npsn.replace(/0/g, '').length > 0 && res.nisn.replace(/0/g, '').length > 0;
+      const combinedScore = res.contrastScore + (hasValidId ? 0.35 : 0);
+
+      if (combinedScore > highestScore) {
+        highestScore = combinedScore;
+        bestResult = { ...res, candidateName: candidate.name };
+      }
+
+      // Jika resultan pertama sudah memiliki kontras sangat baik (>0.75) dan ID valid, hentikan iterasi
+      if (i === 0 && res.contrastScore >= 0.70 && hasValidId) {
+        break;
+      }
+    }
+
+    if (!bestResult || !bestResult.npsn || bestResult.npsn.replace(/0/g, '').length === 0) {
+      throw new Error("Ekstraksi OpenCV gagal: Bulatan LJK tidak terdeteksi dengan jelas. Coba atur pencahayaan atau gunakan Gemini AI.");
+    }
+
+    // 6. Jalankan OCR Tesseract.js pada area tulisan tangan esensial (Nama, Kelas, No. Peserta, Tanggal Ujian)
+    scanStatusMessage.value = 'Mengenali tulisan tangan esensial dengan Tesseract.js...';
+    const ocrData = await recognizeEssentialHandwriting(
+      rectifiedCanvas,
+      roiPackage.resultant?.handwrittenFields || roiPackage.baseline?.handwrittenFields
+    );
+
+    return {
+      npsn: bestResult.npsn,
+      id_mapel: bestResult.id_mapel,
+      kode_tes: bestResult.kode_tes,
+      nisn: bestResult.nisn,
+      answers: bestResult.answers,
+      nama_siswa: ocrData.nama_siswa || '',
+      kelas: ocrData.kelas || '',
+      no_peserta: ocrData.no_peserta || '',
+      tanggal_ujian: ocrData.tanggal_ujian || '',
+      confidence_score: Math.min(0.98, Math.max(0.65, bestResult.contrastScore)),
+      scan_notes: `Ekstraksi OpenCV sukses via ${bestResult.candidateName} (Kontras: ${Math.round(bestResult.contrastScore * 100)}%).`,
+      engine: 'opencv'
+    };
+
+  } finally {
+    if (src && !src.isDeleted()) src.delete();
+    if (rectifiedMat && !rectifiedMat.isDeleted()) rectifiedMat.delete();
+    if (gray && !gray.isDeleted()) gray.delete();
+    if (thresh && !thresh.isDeleted()) thresh.delete();
+  }
+};
+
+// Fungsi pembelajaran kalibrasi otomatis dari hasil scan Gemini AI
+const learnFromGeminiResult = async (imageDataUrl: string, geminiData: GeminiOmrResultData) => {
+  if (!enableAiCalibration.value || !selectedTemplate.value) return;
+  try {
+    isCalibrating.value = true;
+    const img = new Image();
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = imageDataUrl;
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth || 1000;
+    canvas.height = img.naturalHeight || 1414;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    const baseline = await db.templateRois.get(`${selectedTemplate.value.id}_baseline`);
+    const baselineRois = baseline?.vectorRois || [];
+    if (baselineRois.length > 0) {
+      const calibratedRois = calibrateVectorRoisFromScan(baselineRois, canvas, geminiData);
+      await recordCalibrationSample(selectedTemplate.value.id, calibratedRois, {
+        modelName: activeModelLabel.value,
+        imageWidth: canvas.width,
+        imageHeight: canvas.height,
+        notes: `Kalibrasi otomatis AI ${activeModelLabel.value}`
+      });
+      await refreshCalibrationInfo();
+    }
+  } catch (err: any) {
+    console.warn('[Kalibrasi AI] Gagal menyimpan sampel kalibrasi:', err);
+  } finally {
+    isCalibrating.value = false;
+  }
 };
 
 const saveScanResult = async (result: any) => {
@@ -914,11 +1196,12 @@ const captureAndScan = async () => {
   isScanning.value = true;
   scanStatusMessage.value = scanEngine.value === 'gemini'
     ? `Menganalisis LJK dengan ${activeModelLabel.value}...`
-    : 'Memproses dengan OpenCV...';
+    : 'Memproses dengan OpenCV & Tesseract...';
 
   try {
     if (scanEngine.value === 'gemini') {
       const dataUrl = captureImageFromVideo();
+      pendingImageUrl.value = dataUrl;
       const res = await scanWithGemini(dataUrl, selectedTemplate.value, activeModel.value);
       if (!res.data) throw new Error(res.error || "Hasil pemindaian Gemini kosong.");
 
@@ -930,6 +1213,7 @@ const captureAndScan = async () => {
           ...res.data,
           engine: 'gemini'
         });
+        await learnFromGeminiResult(dataUrl, res.data);
         addSessionLog('success', `NISN: ${res.data.nisn}`, `Berhasil (${activeModelLabel.value})`, 'gemini');
         omrStore.showToast(`Berhasil dipindai (${activeModelLabel.value})! NISN: ${res.data.nisn}`, 'success');
       }
@@ -939,7 +1223,7 @@ const captureAndScan = async () => {
         ...result,
         engine: 'opencv'
       });
-      addSessionLog('success', `NISN: ${result.nisn}`, 'Berhasil disimpan (OpenCV)', 'opencv');
+      addSessionLog('success', `NISN: ${result.nisn}`, 'Berhasil disimpan (OpenCV + Vektor ROI)', 'opencv');
       omrStore.showToast(`Berhasil dipindai! (NISN: ${result.nisn})`, 'success');
     }
   } catch (e: any) {
@@ -957,10 +1241,14 @@ const confirmAndSaveAiResult = async () => {
       ...pendingAiResult.value,
       engine: 'gemini'
     });
+    if (pendingImageUrl.value) {
+      await learnFromGeminiResult(pendingImageUrl.value, pendingAiResult.value);
+    }
     addSessionLog('success', `NISN: ${pendingAiResult.value.nisn}`, 'Berhasil disimpan (Gemini AI)', 'gemini');
     omrStore.showToast(`Data NISN ${pendingAiResult.value.nisn} berhasil disimpan!`, 'success');
     showAiPreviewDialog.value = false;
     pendingAiResult.value = null;
+    pendingImageUrl.value = '';
   } catch (err: any) {
     omrStore.showToast(`Gagal menyimpan: ${err.message}`, 'error');
   }
@@ -969,6 +1257,7 @@ const confirmAndSaveAiResult = async () => {
 const cancelAiResult = () => {
   showAiPreviewDialog.value = false;
   pendingAiResult.value = null;
+  pendingImageUrl.value = '';
   omrStore.showToast('Pemindaian dibatalkan.', 'info');
 };
 
@@ -1042,6 +1331,7 @@ const processBatchQueue = async () => {
           ...res.data,
           engine: 'gemini'
         });
+        await learnFromGeminiResult(dataUrl, res.data);
         addSessionLog('success', batchFile.file.name, `Berhasil (${activeModelLabel.value} - NISN: ${res.data.nisn})`, 'gemini');
       } else {
         const img = await loadImageFromFile(batchFile.file);
