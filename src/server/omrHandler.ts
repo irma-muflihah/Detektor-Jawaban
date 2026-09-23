@@ -3,27 +3,32 @@ import type { Request, Response } from "express";
 
 let aiClient: GoogleGenAI | null = null;
 
-function getGeminiClient(): GoogleGenAI {
-  const apiKey = process.env.GEMINI_API_KEY;
+function getGeminiClient(customApiKey?: string): GoogleGenAI {
+  const apiKey = (customApiKey || process.env.GEMINI_API_KEY || '').trim();
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY belum dikonfigurasi. Silakan tambahkan API key di menu Settings > Secrets.");
+    throw new Error("GEMINI_API_KEY belum dikonfigurasi. Silakan masukkan API key di menu Pengaturan aplikasi atau di Environment Variables Vercel.");
   }
-  if (!aiClient) {
-    aiClient = new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        },
+  if (!customApiKey && aiClient) {
+    return aiClient;
+  }
+  const client = new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
       },
-    });
+    },
+  });
+  if (!customApiKey) {
+    aiClient = client;
   }
-  return aiClient;
+  return client;
 }
 
 export interface OMRScanRequestBody {
   image: string; // Base64 data or data URL
   mimeType?: string;
+  apiKey?: string;
   template?: {
     id?: string;
     name?: string;
@@ -126,7 +131,25 @@ export async function handleOmrScan(req: Request | any, res: Response | any) {
       }
     }
 
-    const ai = getGeminiClient();
+    const customApiKey = ((req.headers && req.headers['x-gemini-api-key']) as string) || (body as any)?.apiKey;
+    const requestedModel = (((req.headers && req.headers['x-gemini-model']) as string) || (body as any)?.model || '').trim();
+    const ai = getGeminiClient(customApiKey);
+
+    // Build model candidate list prioritizing the user's requested model
+    const candidateList: ModelCandidate[] = [];
+    if (requestedModel) {
+      candidateList.push({
+        name: requestedModel,
+        thinkingLevel: (requestedModel.includes('pro') || requestedModel.includes('3.8')) ? ThinkingLevel.LOW : undefined,
+      });
+    }
+
+    // Add standard fallbacks if not already in list
+    for (const def of CANDIDATE_MODELS) {
+      if (!candidateList.some(c => c.name === def.name)) {
+        candidateList.push(def);
+      }
+    }
 
     // Prepare template description context for Gemini
     let templateContext = "";
@@ -267,8 +290,8 @@ Petunjuk Khusus Ekstraksi:
     let successfulModelName: string = '';
 
     // Attempt generation through fallback models with backoff
-    for (let mIdx = 0; mIdx < CANDIDATE_MODELS.length; mIdx++) {
-      const candidate = CANDIDATE_MODELS[mIdx];
+    for (let mIdx = 0; mIdx < candidateList.length; mIdx++) {
+      const candidate = candidateList[mIdx];
       const maxRetriesForCandidate = 2;
 
       for (let attempt = 1; attempt <= maxRetriesForCandidate; attempt++) {

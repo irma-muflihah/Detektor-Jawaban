@@ -24,6 +24,10 @@
         <v-list-item prepend-icon="mdi-chart-box-outline" title="Analisis" to="/analisis" rounded="lg" class="mb-1"></v-list-item>
       </v-list>
       
+      <v-divider class="my-2"></v-divider>
+      <v-list nav class="px-2" bg-color="transparent">
+        <v-list-item prepend-icon="mdi-cog-outline" title="Pengaturan API" @click="showApiKeyDialog = true" rounded="lg" class="mb-1"></v-list-item>
+      </v-list>
 
     </v-navigation-drawer>
 
@@ -57,6 +61,16 @@
         Unduh
       </v-btn>
 
+      <v-btn
+        icon
+        variant="text"
+        class="mr-1"
+        title="Pengaturan Gemini API Key (Vercel)"
+        @click="showApiKeyDialog = true"
+      >
+        <v-icon>mdi-cog-outline</v-icon>
+      </v-btn>
+
       <v-btn icon @click="toggleTheme" class="mr-2"><v-icon>{{ isDark ? 'mdi-moon-waning-crescent' : 'mdi-white-balance-sunny' }}</v-icon></v-btn>
     </v-app-bar>
 
@@ -87,6 +101,8 @@
       </v-card>
     </v-dialog>
 
+    <GeminiSettingsDialog v-model="showApiKeyDialog" />
+
     <v-snackbar v-model="omrStore.snackbar.show" :color="omrStore.snackbar.color" :timeout="3500" location="bottom right">
       <span class="font-weight-medium">{{ omrStore.snackbar.text }}</span>
       <template v-slot:actions><v-btn variant="text" icon="mdi-close" @click="omrStore.snackbar.show = false"></v-btn></template>
@@ -99,9 +115,11 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { useOmrStore } from './store/omrStore';
 import { exportSvgToPdf } from './utils/pdfExport';
+import GeminiSettingsDialog from './components/GeminiSettingsDialog.vue';
 
 const isDark = ref(false);
 const showPdfDialog = ref(false);
+const showApiKeyDialog = ref(false);
 const pdfCopies = ref(2);
 const isDownloading = ref(false);
 

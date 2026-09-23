@@ -15,10 +15,13 @@ app.post('/api/gemini/omr-scan', (req, res) => {
   handleOmrScan(req, res);
 });
 
-app.get('/api/gemini/health', (_req, res) => {
+app.get('/api/gemini/health', (req, res) => {
+  const customKey = (req.headers['x-gemini-api-key'] as string) || (req.query.key as string);
+  const hasKey = Boolean(customKey || process.env.GEMINI_API_KEY);
   res.json({
     status: 'ok',
-    hasGeminiKey: Boolean(process.env.GEMINI_API_KEY),
+    hasGeminiKey: hasKey,
+    source: customKey ? 'client' : (process.env.GEMINI_API_KEY ? 'server' : 'none'),
   });
 });
 
@@ -30,6 +33,10 @@ app.use((_req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`DEJAWAB server listening on http://0.0.0.0:${PORT}`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`DEJAWAB server listening on http://0.0.0.0:${PORT}`);
+  });
+}
+
+export default app;

@@ -108,6 +108,34 @@
                     </v-btn>
                   </v-btn-toggle>
 
+                  <!-- Badge Model Gemini Terpilih -->
+                  <v-chip
+                    v-if="scanEngine === 'gemini'"
+                    size="small"
+                    color="primary"
+                    variant="tonal"
+                    class="font-weight-bold cursor-pointer"
+                    prepend-icon="mdi-brain"
+                    title="Klik untuk memilih model lain atau mengatur API Key"
+                    @click="showApiKeyDialog = true"
+                  >
+                    {{ activeModelLabel }}
+                    <v-icon size="14" class="ml-1">mdi-chevron-down</v-icon>
+                  </v-chip>
+
+                  <v-btn
+                    v-if="scanEngine === 'gemini'"
+                    size="small"
+                    color="primary"
+                    variant="outlined"
+                    class="text-none font-weight-bold rounded-lg"
+                    prepend-icon="mdi-tune"
+                    title="Konfigurasi Model & API Key Gemini"
+                    @click="showApiKeyDialog = true"
+                  >
+                    Atur Model
+                  </v-btn>
+
                   <v-switch
                     v-if="scanEngine === 'gemini'"
                     v-model="previewBeforeSave"
@@ -487,6 +515,9 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Dialog Pengaturan Gemini API Key -->
+    <GeminiSettingsDialog v-model="showApiKeyDialog" @saved="refreshGeminiHealth" />
   </v-container>
 </template>
 
@@ -495,6 +526,8 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useOmrStore } from '../store/omrStore';
 import { db, type ScanResult } from '../db/database';
 import { scanWithGemini, checkGeminiHealth, type GeminiOmrResultData } from '../services/geminiScanner';
+import { getStoredModel, GEMINI_MODEL_PRESETS, DEFAULT_GEMINI_MODEL } from '../services/geminiKeyService';
+import GeminiSettingsDialog from '../components/GeminiSettingsDialog.vue';
 
 const omrStore = useOmrStore();
 
@@ -509,8 +542,21 @@ const scanStatusMessage = ref('Memproses...');
 const scanEngine = ref<'gemini' | 'opencv'>('gemini');
 const previewBeforeSave = ref(true);
 const showAiPreviewDialog = ref(false);
+const showApiKeyDialog = ref(false);
 const pendingAiResult = ref<GeminiOmrResultData | null>(null);
 const geminiStatus = ref<{ status: string; hasGeminiKey: boolean }>({ status: 'checking', hasGeminiKey: false });
+const activeModel = ref<string>(getStoredModel());
+
+const activeModelLabel = computed(() => {
+  const modelId = activeModel.value;
+  const preset = GEMINI_MODEL_PRESETS.find(p => p.id === modelId);
+  return preset ? preset.name : (modelId || DEFAULT_GEMINI_MODEL);
+});
+
+const refreshGeminiHealth = async () => {
+  geminiStatus.value = await checkGeminiHealth();
+  activeModel.value = getStoredModel();
+};
 
 // Session State
 interface SessionLog {
@@ -867,13 +913,13 @@ const captureAndScan = async () => {
   
   isScanning.value = true;
   scanStatusMessage.value = scanEngine.value === 'gemini'
-    ? 'Menganalisis LJK dengan Gemini AI Vision...'
+    ? `Menganalisis LJK dengan ${activeModelLabel.value}...`
     : 'Memproses dengan OpenCV...';
 
   try {
     if (scanEngine.value === 'gemini') {
       const dataUrl = captureImageFromVideo();
-      const res = await scanWithGemini(dataUrl, selectedTemplate.value);
+      const res = await scanWithGemini(dataUrl, selectedTemplate.value, activeModel.value);
       if (!res.data) throw new Error(res.error || "Hasil pemindaian Gemini kosong.");
 
       if (previewBeforeSave.value) {
@@ -884,8 +930,8 @@ const captureAndScan = async () => {
           ...res.data,
           engine: 'gemini'
         });
-        addSessionLog('success', `NISN: ${res.data.nisn}`, `Berhasil (Gemini AI)`, 'gemini');
-        omrStore.showToast(`Berhasil dipindai dengan Gemini AI! (NISN: ${res.data.nisn})`, 'success');
+        addSessionLog('success', `NISN: ${res.data.nisn}`, `Berhasil (${activeModelLabel.value})`, 'gemini');
+        omrStore.showToast(`Berhasil dipindai (${activeModelLabel.value})! NISN: ${res.data.nisn}`, 'success');
       }
     } else {
       const result = await processOMRImage(videoElement.value);
@@ -990,13 +1036,13 @@ const processBatchQueue = async () => {
     try {
       if (scanEngine.value === 'gemini') {
         const dataUrl = await fileToDataUrl(batchFile.file);
-        const res = await scanWithGemini(dataUrl, selectedTemplate.value);
+        const res = await scanWithGemini(dataUrl, selectedTemplate.value, activeModel.value);
         if (!res.data) throw new Error(res.error || "Gagal memindai berkas.");
         await saveScanResult({
           ...res.data,
           engine: 'gemini'
         });
-        addSessionLog('success', batchFile.file.name, `Berhasil (NISN: ${res.data.nisn})`, 'gemini');
+        addSessionLog('success', batchFile.file.name, `Berhasil (${activeModelLabel.value} - NISN: ${res.data.nisn})`, 'gemini');
       } else {
         const img = await loadImageFromFile(batchFile.file);
         const result = await processOMRImage(img);
