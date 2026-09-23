@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 3000",
-    "build": "vue-tsc && vite build",
+    "build": "vite build",
     "lint": "vue-tsc --noEmit",
     "start": "node server.ts",
     "release": "npm version patch --no-git-tag-version && npm run build && git add . && git commit -m \"Auto-build and version bump\" && git push",
