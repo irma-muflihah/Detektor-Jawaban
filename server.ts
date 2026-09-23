@@ -7,7 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: '50mb' }));
 
@@ -25,8 +25,8 @@ app.get('/api/gemini/health', (_req, res) => {
 // Serve production frontend assets from dist
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// SPA fallback
-app.get('*', (_req, res) => {
+// SPA fallback compatible with Express 5 / path-to-regexp v8
+app.use((_req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
