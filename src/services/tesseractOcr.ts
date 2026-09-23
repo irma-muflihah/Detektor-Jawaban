@@ -70,6 +70,7 @@ function preprocessCrop(
   // Grayscale & Adaptive contrast stretch
   let minLum = 255;
   let maxLum = 0;
+  let lumSum = 0;
 
   for (let i = 0; i < data.length; i += 4) {
     const lum = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
@@ -78,18 +79,21 @@ function preprocessCrop(
     data[i + 2] = lum;
     if (lum < minLum) minLum = lum;
     if (lum > maxLum) maxLum = lum;
+    lumSum += lum;
   }
 
-  // Normalisasi kontras jika rentang luminansi cukup
+  const numPixels = data.length / 4;
+  const avgLum = numPixels > 0 ? lumSum / numPixels : 128;
   const range = maxLum - minLum;
-  if (range > 30) {
+
+  if (range > 20) {
+    // Ambang batas lokal adaptif: mempertahankan goresan pensil tipis tanpa merusak karakter
+    const localThreshold = Math.min(220, Math.max(90, Math.round(avgLum * 0.85)));
     for (let i = 0; i < data.length; i += 4) {
-      const stretched = Math.min(255, Math.max(0, Math.round(((data[i] - minLum) / range) * 255)));
-      // Binarize / High-pass contrast
-      const binarized = stretched < 145 ? 0 : 255;
-      data[i] = binarized;
-      data[i + 1] = binarized;
-      data[i + 2] = binarized;
+      const val = data[i] < localThreshold ? Math.max(0, data[i] - 50) : 255;
+      data[i] = val;
+      data[i + 1] = val;
+      data[i + 2] = val;
     }
   }
 
@@ -121,41 +125,41 @@ export async function recognizeEssentialHandwriting(
     tanggal_ujian: ''
   };
 
-  // Gunakan field default jika tidak disuplai
+  // Gunakan field default yang selaras dengan templat jika tidak disuplai
   const actualFields: NormalizedFieldROI[] = (fields && fields.length > 0)
     ? fields
     : [
         {
           key: 'nama_lengkap',
           label: 'Nama Lengkap',
-          normX: 150 / 1000,
-          normY: 108 / 1414,
+          normX: 105 / 1000,
+          normY: 163 / 1414,
           normWidth: 790 / 1000,
-          normHeight: 28 / 1414
+          normHeight: 34 / 1414
         },
         {
           key: 'kelas',
           label: 'Kelas',
-          normX: 150 / 1000,
-          normY: 156 / 1414,
+          normX: 105 / 1000,
+          normY: 211 / 1414,
           normWidth: 150 / 1000,
-          normHeight: 28 / 1414
+          normHeight: 34 / 1414
         },
         {
           key: 'no_peserta',
           label: 'No. Peserta',
-          normX: 315 / 1000,
-          normY: 156 / 1414,
+          normX: 270 / 1000,
+          normY: 211 / 1414,
           normWidth: 150 / 1000,
-          normHeight: 28 / 1414
+          normHeight: 34 / 1414
         },
         {
           key: 'tanggal_pelaksanaan',
           label: 'Tanggal Pelaksanaan',
-          normX: 480 / 1000,
-          normY: 156 / 1414,
+          normX: 435 / 1000,
+          normY: 211 / 1414,
           normWidth: 460 / 1000,
-          normHeight: 28 / 1414
+          normHeight: 34 / 1414
         }
       ];
 

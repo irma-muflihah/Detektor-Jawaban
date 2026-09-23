@@ -387,6 +387,27 @@
               </div>
             </div>
 
+            <!-- Pratinjau Citra LJK Tegak Lurus (Hasil Koreksi Orientasi) -->
+            <div v-if="pendingImageUrl" class="bg-white rounded-lg border pa-3">
+              <div class="d-flex align-center justify-space-between mb-2">
+                <span class="text-caption font-weight-bold text-grey-darken-2 d-flex align-center gap-1">
+                  <v-icon size="18" color="primary">mdi-crop-rotate</v-icon>
+                  CITRA LJK TERSINKRONISASI (POTRET TEGAK)
+                </span>
+                <v-chip size="x-small" color="primary" variant="tonal" class="font-weight-bold">
+                  Kop Judul di Atas
+                </v-chip>
+              </div>
+              <div class="d-flex justify-center bg-grey-lighten-4 rounded pa-2 border border-dashed">
+                <img
+                  :src="pendingImageUrl"
+                  alt="LJK Tegak Lurus"
+                  style="max-height: 220px; max-width: 100%; object-fit: contain;"
+                  class="rounded elevation-1"
+                />
+              </div>
+            </div>
+
             <!-- Identity Grid (OCR Tulisan Tangan & OMR Digital) -->
             <div class="bg-white rounded-lg border pa-3">
               <div class="text-caption font-weight-bold text-grey-darken-2 mb-2 text-uppercase">
@@ -547,11 +568,17 @@ import { scanWithGemini, checkGeminiHealth, type GeminiOmrResultData } from '../
 import { getStoredModel, GEMINI_MODEL_PRESETS, DEFAULT_GEMINI_MODEL } from '../services/geminiKeyService';
 import {
   getTemplateRoisForScanning,
+  saveBaselineRoi,
   calibrateVectorRoisFromScan,
   recordCalibrationSample,
   resetTemplateCalibration
 } from '../utils/roiVectorService';
 import { recognizeEssentialHandwriting, terminateOcrWorker } from '../services/tesseractOcr';
+import {
+  rectifyAndOrientLjkSheet,
+  normalizeSourceToUprightCanvas
+} from '../utils/imageOrientationService';
+import { extractOmrWithRelativeScoring, refineFiducialRegistration } from '../utils/omrExtractionService';
 import GeminiSettingsDialog from '../components/GeminiSettingsDialog.vue';
 
 const omrStore = useOmrStore();
@@ -764,92 +791,10 @@ const captureImageFromVideo = (): string => {
   return canvas.toDataURL('image/jpeg', 0.92);
 };
 
-// Transformasi perspektif homografi (4 sudut lembar LJK)
-const rectifyLjkSheet = (srcMat: any, cv: any, targetW = 1000, targetH = 1414): any => {
-  let gray = new cv.Mat();
-  let blur = new cv.Mat();
-  let edges = new cv.Mat();
-  let contours = new cv.MatVector();
-  let hierarchy = new cv.Mat();
+// Catatan: Fungsi rectifyLjkSheet telah ditingkatkan menjadi rectifyAndOrientLjkSheet
+// pada modul imageOrientationService untuk deteksi orientasi landscape (90°, 270°) dan terbalik (180°).
 
-  try {
-    cv.cvtColor(srcMat, gray, cv.COLOR_RGBA2GRAY, 0);
-    cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0);
-    cv.Canny(blur, edges, 50, 150);
-
-    cv.findContours(edges, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
-
-    let maxArea = 0;
-    let bestPoly: any = null;
-    const minArea = srcMat.rows * srcMat.cols * 0.20;
-
-    for (let i = 0; i < contours.size(); i++) {
-      const cnt = contours.get(i);
-      const area = cv.contourArea(cnt);
-      if (area > minArea && area > maxArea) {
-        const peri = cv.arcLength(cnt, true);
-        const approx = new cv.Mat();
-        cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
-        if (approx.rows === 4) {
-          maxArea = area;
-          if (bestPoly) bestPoly.delete();
-          bestPoly = approx;
-        } else {
-          approx.delete();
-        }
-      }
-      cnt.delete();
-    }
-
-    const rectified = new cv.Mat();
-
-    if (bestPoly) {
-      const pts: Array<{ x: number; y: number }> = [];
-      for (let i = 0; i < 4; i++) {
-        pts.push({ x: bestPoly.data32S[i * 2], y: bestPoly.data32S[i * 2 + 1] });
-      }
-      bestPoly.delete();
-
-      pts.sort((a, b) => a.y - b.y);
-      const topPts = [pts[0], pts[1]].sort((a, b) => a.x - b.x);
-      const botPts = [pts[2], pts[3]].sort((a, b) => a.x - b.x);
-      const sorted = [topPts[0], topPts[1], botPts[1], botPts[0]]; // TL, TR, BR, BL
-
-      const srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
-        sorted[0].x, sorted[0].y,
-        sorted[1].x, sorted[1].y,
-        sorted[2].x, sorted[2].y,
-        sorted[3].x, sorted[3].y
-      ]);
-
-      const dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
-        0, 0,
-        targetW, 0,
-        targetW, targetH,
-        0, targetH
-      ]);
-
-      const M = cv.getPerspectiveTransform(srcTri, dstTri);
-      cv.warpPerspective(srcMat, rectified, M, new cv.Size(targetW, targetH), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar(255, 255, 255, 255));
-
-      srcTri.delete();
-      dstTri.delete();
-      M.delete();
-    } else {
-      cv.resize(srcMat, rectified, new cv.Size(targetW, targetH), 0, 0, cv.INTER_LINEAR);
-    }
-
-    return rectified;
-  } finally {
-    gray.delete();
-    blur.delete();
-    edges.delete();
-    contours.delete();
-    hierarchy.delete();
-  }
-};
-
-// Evaluasi ekstraksi menggunakan set koordinat ROI vektor tertentu
+// Evaluasi ekstraksi menggunakan set koordinat ROI vektor tertentu dengan Local Snapping & Relative Scoring
 const evaluateExtractionWithVectorRoi = (
   threshMat: any,
   cv: any,
@@ -857,172 +802,12 @@ const evaluateExtractionWithVectorRoi = (
   sheetW: number,
   sheetH: number,
   template: any
-): {
-  npsn: string;
-  id_mapel: string;
-  kode_tes: string;
-  nisn: string;
-  answers: any[];
-  contrastScore: number;
-} => {
-  let npsn = '';
-  let id_mapel = '';
-  let kode_tes = '';
-  let nisn = '';
-  let answers: any[] = [];
-
-  let totalContrastSum = 0;
-  let evaluatedItemsCount = 0;
-
-  template.blocks.forEach((block: any) => {
-    if (!block.bubbles || block.bubbles.length === 0) return;
-
-    if (block.direction === 'vertical') {
-      const cols = block.cols || 0;
-      const rows = block.rows || 10;
-      let resultString = '';
-
-      for (let c = 1; c <= cols; c++) {
-        let maxIntensity = 0;
-        let secondIntensity = 0;
-        let selectedValue = '';
-
-        for (let r = 1; r <= rows; r++) {
-          const bubbleId = `${block.id}_col${c}_row${r}`;
-          const vBubble = vectorRois.find(b => b.id === bubbleId);
-          if (vBubble) {
-            const bx = Math.round(vBubble.normX * sheetW);
-            const by = Math.round(vBubble.normY * sheetH);
-            const br = Math.max(3, Math.round(vBubble.normR * sheetW));
-            const innerMargin = Math.max(2, Math.round(br * 0.35));
-            const innerSize = Math.max(4, br * 2 - innerMargin * 2);
-            const innerX = Math.max(0, Math.min(sheetW - innerSize, bx - br + innerMargin));
-            const innerY = Math.max(0, Math.min(sheetH - innerSize, by - br + innerMargin));
-
-            const rect = new cv.Rect(innerX, innerY, innerSize, innerSize);
-            const roi = threshMat.roi(rect);
-            const mean = cv.mean(roi);
-            roi.delete();
-
-            const intensity = mean[0];
-            if (intensity > maxIntensity) {
-              secondIntensity = maxIntensity;
-              maxIntensity = intensity;
-              selectedValue = vBubble.value;
-            } else if (intensity > secondIntensity) {
-              secondIntensity = intensity;
-            }
-          }
-        }
-
-        const separation = Math.max(0, maxIntensity - secondIntensity) / 255.0;
-        totalContrastSum += separation;
-        evaluatedItemsCount++;
-
-        if (maxIntensity > 80) {
-          resultString += selectedValue;
-        } else {
-          resultString += '0';
-        }
-      }
-
-      if (block.type === 'identity_npsn') npsn = resultString;
-      else if (block.type === 'identity_subject') id_mapel = resultString;
-      else if (block.type === 'identity_test') kode_tes = resultString;
-      else if (block.type === 'identity_nisn') nisn = resultString;
-
-    } else if (block.direction === 'horizontal') {
-      const rows = block.rows || 1;
-      const opts = block.options || [];
-      const isTriple = block.type === 'bs3' || block.type === 'yt3';
-      const totalRows = isTriple ? rows * 3 : rows;
-      let tripleAnswers: { [key: number]: string[] } = {};
-
-      for (let r = 1; r <= totalRows; r++) {
-        const qNum = (block.startNum || 0) + (isTriple ? Math.floor((r - 1) / 3) : r - 1);
-        let selectedValues: string[] = [];
-        let maxIntensity = 0;
-        let secondIntensity = 0;
-        let selectedValue = '';
-
-        opts.forEach((_opt: string, oIdx: number) => {
-          const subId = isTriple ? `_sub${(r - 1) % 3}` : '';
-          const bubbleId = `${block.id}_q${qNum}${subId}_opt${oIdx}`;
-          const vBubble = vectorRois.find(b => b.id === bubbleId);
-
-          if (vBubble) {
-            const bx = Math.round(vBubble.normX * sheetW);
-            const by = Math.round(vBubble.normY * sheetH);
-            const br = Math.max(3, Math.round(vBubble.normR * sheetW));
-            const innerMargin = Math.max(2, Math.round(br * 0.35));
-            const innerSize = Math.max(4, br * 2 - innerMargin * 2);
-            const innerX = Math.max(0, Math.min(sheetW - innerSize, bx - br + innerMargin));
-            const innerY = Math.max(0, Math.min(sheetH - innerSize, by - br + innerMargin));
-
-            const rect = new cv.Rect(innerX, innerY, innerSize, innerSize);
-            const roi = threshMat.roi(rect);
-            const mean = cv.mean(roi);
-            roi.delete();
-
-            const intensity = mean[0];
-            if (block.type === 'kompleks') {
-              if (intensity > 85) {
-                selectedValues.push(vBubble.value);
-              }
-            } else {
-              if (intensity > maxIntensity) {
-                secondIntensity = maxIntensity;
-                maxIntensity = intensity;
-                selectedValue = vBubble.value;
-              } else if (intensity > secondIntensity) {
-                secondIntensity = intensity;
-              }
-            }
-          }
-        });
-
-        if (block.type !== 'kompleks') {
-          const separation = Math.max(0, maxIntensity - secondIntensity) / 255.0;
-          totalContrastSum += separation;
-          evaluatedItemsCount++;
-        }
-
-        if (block.type === 'kompleks') {
-          answers.push({
-            nomor_soal: qNum,
-            bentuk_soal: block.type,
-            jawaban: selectedValues.length > 0 ? selectedValues : []
-          });
-        } else if (isTriple) {
-          if (!tripleAnswers[qNum]) tripleAnswers[qNum] = [];
-          tripleAnswers[qNum].push(maxIntensity > 85 ? selectedValue : '-');
-        } else {
-          answers.push({
-            nomor_soal: qNum,
-            bentuk_soal: block.type,
-            jawaban: maxIntensity > 85 ? selectedValue : '-'
-          });
-        }
-      }
-
-      if (isTriple) {
-        for (const [qn, ansArr] of Object.entries(tripleAnswers)) {
-          answers.push({
-            nomor_soal: Number(qn),
-            bentuk_soal: block.type,
-            jawaban: ansArr
-          });
-        }
-      }
-    }
-  });
-
-  const contrastScore = evaluatedItemsCount > 0 ? totalContrastSum / evaluatedItemsCount : 0.5;
-  return { npsn, id_mapel, kode_tes, nisn, answers, contrastScore };
+) => {
+  return extractOmrWithRelativeScoring(threshMat, null, cv, vectorRois, sheetW, sheetH, template);
 };
 
 // Pemrosesan OMR Citra OpenCV + Homografi + Skala ROI Vektor + Multi-ROI Iteration + Tesseract OCR
-const processOMRImage = async (imageSource: HTMLImageElement | HTMLVideoElement): Promise<any> => {
+const processOMRImage = async (imageSource: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | string): Promise<any> => {
   if (!cvReady.value) {
     throw new Error("OpenCV belum siap.");
   }
@@ -1033,14 +818,27 @@ const processOMRImage = async (imageSource: HTMLImageElement | HTMLVideoElement)
   }
 
   const cv = (window as any).cv;
+  let sourceEl: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement;
+
+  if (typeof imageSource === 'string') {
+    sourceEl = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("Gagal membaca gambar untuk OpenCV"));
+      img.src = imageSource;
+    });
+  } else {
+    sourceEl = imageSource;
+  }
+
   let rawCanvas = document.createElement('canvas');
-  const naturalW = (imageSource as any).naturalWidth || (imageSource as any).videoWidth || 1280;
-  const naturalH = (imageSource as any).naturalHeight || (imageSource as any).videoHeight || 720;
+  const naturalW = (sourceEl as any).naturalWidth || (sourceEl as any).videoWidth || (sourceEl as any).width || 1280;
+  const naturalH = (sourceEl as any).naturalHeight || (sourceEl as any).videoHeight || (sourceEl as any).height || 720;
   rawCanvas.width = naturalW;
   rawCanvas.height = naturalH;
   const rawCtx = rawCanvas.getContext('2d');
   if (!rawCtx) throw new Error("Gagal menginisialisasi kanvas sumber");
-  rawCtx.drawImage(imageSource, 0, 0, naturalW, naturalH);
+  rawCtx.drawImage(sourceEl, 0, 0, naturalW, naturalH);
 
   let src = cv.imread(rawCanvas);
   let rectifiedMat: any = null;
@@ -1048,20 +846,53 @@ const processOMRImage = async (imageSource: HTMLImageElement | HTMLVideoElement)
   let thresh = new cv.Mat();
 
   try {
-    // 1. Transformasi homografi ke rasio A4 tegak lurus
-    rectifiedMat = rectifyLjkSheet(src, cv, 1000, 1414);
+    // 1. Transformasi homografi + Koreksi orientasi otomatis ke Potret Tegak Lurus (1000x1414)
+    const rectResult = rectifyAndOrientLjkSheet(src, cv, 1000, 1414);
+    rectifiedMat = rectResult.rectifiedMat;
+    const rectifiedCanvas = rectResult.canvas;
+    pendingImageUrl.value = rectResult.dataUrl;
 
-    // 2. Buat rectified canvas untuk Tesseract OCR tulisan tangan esensial
-    const rectifiedCanvas = document.createElement('canvas');
-    rectifiedCanvas.width = 1000;
-    rectifiedCanvas.height = 1414;
-    cv.imshow(rectifiedCanvas, rectifiedMat);
-
-    // 3. Thresholding biner inversi untuk OMR
+    // 2. Thresholding biner inversi untuk OMR dengan Gaussian blur peredam noise
     cv.cvtColor(rectifiedMat, gray, cv.COLOR_RGBA2GRAY, 0);
-    cv.threshold(gray, thresh, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+    let blurMat = new cv.Mat();
+    cv.GaussianBlur(gray, blurMat, new cv.Size(3, 3), 0);
+    cv.threshold(blurMat, thresh, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+    blurMat.delete();
 
-    // 4. Ambil koleksi ROI vektor dari Dexie (Resultan, Sampel Kalibrasi AI, Baseline)
+    // 2b. Penyelarasan Sub-Piksel Presisi Tinggi berbasis 4 Penanda Fiducial Sudut (50,50),(950,50),(50,1364),(950,1364)
+    const fiducial = refineFiducialRegistration(thresh, cv, 1000, 1414);
+    if (fiducial.isRegistered && fiducial.transformMatrix) {
+      let fineRectified = new cv.Mat();
+      cv.warpPerspective(
+        rectifiedMat,
+        fineRectified,
+        fiducial.transformMatrix,
+        new cv.Size(1000, 1414),
+        cv.INTER_LINEAR,
+        cv.BORDER_CONSTANT,
+        new cv.Scalar(255, 255, 255, 255)
+      );
+      rectifiedMat.delete();
+      rectifiedMat = fineRectified;
+
+      // Render ulang ke kanvas pratinjau dan OCR
+      cv.imshow(rectifiedCanvas, rectifiedMat);
+      pendingImageUrl.value = rectifiedCanvas.toDataURL('image/jpeg', 0.94);
+
+      // Sinkronkan threshold biner dengan citra yang telah terselaraskan sub-piksel
+      gray.delete();
+      thresh.delete();
+      gray = new cv.Mat();
+      thresh = new cv.Mat();
+      cv.cvtColor(rectifiedMat, gray, cv.COLOR_RGBA2GRAY, 0);
+      let blurFine = new cv.Mat();
+      cv.GaussianBlur(gray, blurFine, new cv.Size(3, 3), 0);
+      cv.threshold(blurFine, thresh, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+      blurFine.delete();
+      fiducial.transformMatrix.delete();
+    }
+
+    // 3. Ambil koleksi ROI vektor dari Dexie (Resultan, Sampel Kalibrasi AI, Baseline)
     const roiPackage = await getTemplateRoisForScanning(template.id);
     const candidateRois: Array<{ name: string; vectorRois: NormalizedBubbleROI[] }> = [];
 
@@ -1079,10 +910,21 @@ const processOMRImage = async (imageSource: HTMLImageElement | HTMLVideoElement)
     }
 
     if (candidateRois.length === 0) {
+      try {
+        const baselineRecord = await saveBaselineRoi(template);
+        if (baselineRecord.vectorRois?.length > 0) {
+          candidateRois.push({ name: 'Baseline Desain Otomatis', vectorRois: baselineRecord.vectorRois });
+        }
+      } catch (genErr) {
+        console.warn('Gagal membangkitkan baseline ROI otomatis:', genErr);
+      }
+    }
+
+    if (candidateRois.length === 0) {
       throw new Error("Data ROI vektor templat belum tersedia di basis data.");
     }
 
-    // 5. Ekstraksi dengan strategi Multi-ROI: coba resultan terlebih dahulu, fallback ke sampel terbaik jika perlu
+    // 4. Ekstraksi dengan strategi Multi-ROI: coba resultan terlebih dahulu, fallback ke sampel terbaik jika perlu
     let bestResult: any = null;
     let highestScore = -1;
 
@@ -1090,18 +932,54 @@ const processOMRImage = async (imageSource: HTMLImageElement | HTMLVideoElement)
       const candidate = candidateRois[i];
       const res = evaluateExtractionWithVectorRoi(thresh, cv, candidate.vectorRois, 1000, 1414, template);
 
-      // Beri bobot bonus jika NPSN dan NISN terisi
-      const hasValidId = res.npsn.replace(/0/g, '').length > 0 && res.nisn.replace(/0/g, '').length > 0;
-      const combinedScore = res.contrastScore + (hasValidId ? 0.35 : 0);
+      // Skor gabungan: bobot kontras pemisahan + validitas ID (NPSN/NISN) + jumlah butir terjawab
+      const hasValidId = res.npsn.replace(/0/g, '').length >= 3 && res.nisn.replace(/0/g, '').length >= 3;
+      const filledCount = res.detectedMarksCount || 0;
+      const combinedScore = res.contrastScore * 2 + (hasValidId ? 0.5 : 0) + (filledCount / 30.0);
 
       if (combinedScore > highestScore) {
         highestScore = combinedScore;
         bestResult = { ...res, candidateName: candidate.name };
       }
 
-      // Jika resultan pertama sudah memiliki kontras sangat baik (>0.75) dan ID valid, hentikan iterasi
-      if (i === 0 && res.contrastScore >= 0.70 && hasValidId) {
+      // Jika resultan pertama sudah memiliki kontras sangat baik (>0.60), ID valid, dan terdeteksi jawaban, hentikan iterasi
+      if (i === 0 && res.contrastScore >= 0.60 && hasValidId && filledCount >= 10) {
         break;
+      }
+    }
+
+    // Validasi sekunder: Jika skor kontras awal rendah atau ID kosong, uji kemungkinan lembar LJK terbalik 180°
+    if (!bestResult || bestResult.contrastScore < 0.25 || (bestResult.npsn.replace(/0/g, '').length < 3 && bestResult.nisn.replace(/0/g, '').length < 3)) {
+      let flippedThresh = new cv.Mat();
+      cv.rotate(thresh, flippedThresh, cv.ROTATE_180);
+      let bestFlippedResult: any = null;
+      let highestFlippedScore = -1;
+
+      for (let i = 0; i < candidateRois.length; i++) {
+        const candidate = candidateRois[i];
+        const res = evaluateExtractionWithVectorRoi(flippedThresh, cv, candidate.vectorRois, 1000, 1414, template);
+        const hasValidId = res.npsn.replace(/0/g, '').length >= 3 && res.nisn.replace(/0/g, '').length >= 3;
+        const filledCount = res.detectedMarksCount || 0;
+        const combinedScore = res.contrastScore * 2 + (hasValidId ? 0.5 : 0) + (filledCount / 30.0);
+
+        if (combinedScore > highestFlippedScore) {
+          highestFlippedScore = combinedScore;
+          bestFlippedResult = { ...res, candidateName: candidate.name };
+        }
+      }
+
+      if (bestFlippedResult && highestFlippedScore > highestScore + 0.25) {
+        let flippedMat = new cv.Mat();
+        cv.rotate(rectifiedMat, flippedMat, cv.ROTATE_180);
+        rectifiedMat.delete();
+        rectifiedMat = flippedMat;
+        cv.imshow(rectifiedCanvas, rectifiedMat);
+        pendingImageUrl.value = rectifiedCanvas.toDataURL('image/jpeg', 0.92);
+        thresh.delete();
+        thresh = flippedThresh;
+        bestResult = bestFlippedResult;
+      } else {
+        flippedThresh.delete();
       }
     }
 
@@ -1109,12 +987,16 @@ const processOMRImage = async (imageSource: HTMLImageElement | HTMLVideoElement)
       throw new Error("Ekstraksi OpenCV gagal: Bulatan LJK tidak terdeteksi dengan jelas. Coba atur pencahayaan atau gunakan Gemini AI.");
     }
 
-    // 6. Jalankan OCR Tesseract.js pada area tulisan tangan esensial (Nama, Kelas, No. Peserta, Tanggal Ujian)
+    // 5. Jalankan OCR Tesseract.js pada area tulisan tangan esensial (Nama, Kelas, No. Peserta, Tanggal Ujian)
     scanStatusMessage.value = 'Mengenali tulisan tangan esensial dengan Tesseract.js...';
     const ocrData = await recognizeEssentialHandwriting(
       rectifiedCanvas,
       roiPackage.resultant?.handwrittenFields || roiPackage.baseline?.handwrittenFields
     );
+
+    const rotationInfo = rectResult.detectedRotation !== 0
+      ? ` (Orientasi ${rectResult.detectedRotation}° diselaraskan)`
+      : '';
 
     return {
       npsn: bestResult.npsn,
@@ -1127,8 +1009,9 @@ const processOMRImage = async (imageSource: HTMLImageElement | HTMLVideoElement)
       no_peserta: ocrData.no_peserta || '',
       tanggal_ujian: ocrData.tanggal_ujian || '',
       confidence_score: Math.min(0.98, Math.max(0.65, bestResult.contrastScore)),
-      scan_notes: `Ekstraksi OpenCV sukses via ${bestResult.candidateName} (Kontras: ${Math.round(bestResult.contrastScore * 100)}%).`,
-      engine: 'opencv'
+      scan_notes: `Ekstraksi OpenCV sukses via ${bestResult.candidateName}${rotationInfo} (Kontras: ${Math.round(bestResult.contrastScore * 100)}%).`,
+      engine: 'opencv',
+      image_url: pendingImageUrl.value || undefined
     };
 
   } finally {
@@ -1180,6 +1063,7 @@ const learnFromGeminiResult = async (imageDataUrl: string, geminiData: GeminiOmr
 const saveScanResult = async (result: any) => {
   const scanData: ScanResult = {
     ...result,
+    image_url: result.image_url || pendingImageUrl.value || undefined,
     scannedAt: Date.now()
   };
   
@@ -1200,22 +1084,69 @@ const captureAndScan = async () => {
 
   try {
     if (scanEngine.value === 'gemini') {
-      const dataUrl = captureImageFromVideo();
-      pendingImageUrl.value = dataUrl;
-      const res = await scanWithGemini(dataUrl, selectedTemplate.value, activeModel.value);
-      if (!res.data) throw new Error(res.error || "Hasil pemindaian Gemini kosong.");
-
-      if (previewBeforeSave.value) {
-        pendingAiResult.value = res.data;
-        showAiPreviewDialog.value = true;
+      let dataUrl: string;
+      // Jika modul OpenCV aktif, selaraskan orientasi LJK menjadi potret tegak (judul di atas)
+      if (cvReady.value && (window as any).cv) {
+        try {
+          scanStatusMessage.value = 'Menyelaraskan orientasi LJK ke potret tegak...';
+          const norm = normalizeSourceToUprightCanvas(videoElement.value, (window as any).cv);
+          dataUrl = norm.dataUrl;
+          if (norm.detectedRotation !== 0) {
+            console.info(`[Camera Capture] Orientasi diselaraskan (+${norm.detectedRotation}°)`);
+          }
+        } catch (normErr) {
+          console.warn('Fallback ke tangkapan kamera standar:', normErr);
+          dataUrl = captureImageFromVideo();
+        }
       } else {
-        await saveScanResult({
-          ...res.data,
-          engine: 'gemini'
-        });
-        await learnFromGeminiResult(dataUrl, res.data);
-        addSessionLog('success', `NISN: ${res.data.nisn}`, `Berhasil (${activeModelLabel.value})`, 'gemini');
-        omrStore.showToast(`Berhasil dipindai (${activeModelLabel.value})! NISN: ${res.data.nisn}`, 'success');
+        dataUrl = captureImageFromVideo();
+      }
+
+      pendingImageUrl.value = dataUrl;
+      scanStatusMessage.value = `Menganalisis LJK dengan ${activeModelLabel.value}...`;
+
+      try {
+        const res = await scanWithGemini(dataUrl, selectedTemplate.value, activeModel.value);
+        if (!res.data) throw new Error(res.error || "Hasil pemindaian Gemini kosong.");
+
+        if (previewBeforeSave.value) {
+          pendingAiResult.value = res.data;
+          showAiPreviewDialog.value = true;
+        } else {
+          await saveScanResult({
+            ...res.data,
+            engine: 'gemini'
+          });
+          await learnFromGeminiResult(dataUrl, res.data);
+          addSessionLog('success', `NISN: ${res.data.nisn}`, `Berhasil (${activeModelLabel.value})`, 'gemini');
+          omrStore.showToast(`Berhasil dipindai (${activeModelLabel.value})! NISN: ${res.data.nisn}`, 'success');
+        }
+      } catch (geminiErr: any) {
+        const errMsg = geminiErr.message || String(geminiErr);
+        const isQuotaOrServerIssue = (
+          errMsg.includes('429') ||
+          errMsg.includes('503') ||
+          errMsg.includes('kuota') ||
+          errMsg.includes('quota') ||
+          errMsg.includes('RESOURCE_EXHAUSTED') ||
+          errMsg.includes('antrean')
+        );
+
+        if (isQuotaOrServerIssue && cvReady.value && (window as any).cv) {
+          omrStore.showToast('Kuota Gemini penuh/antrean padat. Beralih ke OpenCV & Tesseract lokal...', 'warning');
+          console.warn('[Pindai LJK] Fallback otomatis ke OpenCV karena isu kuota cloud:', errMsg);
+          scanStatusMessage.value = 'Memproses dengan OpenCV & Tesseract (Fallback)...';
+          const result = await processOMRImage(videoElement.value || dataUrl);
+          await saveScanResult({
+            ...result,
+            engine: 'opencv',
+            scan_notes: `${result.scan_notes || ''} (Dialihkan dari Gemini karena kuota cloud)`.trim()
+          });
+          addSessionLog('success', `NISN: ${result.nisn}`, 'Berhasil disimpan via Fallback OpenCV lokal', 'opencv');
+          omrStore.showToast(`Berhasil dipindai via OpenCV! (NISN: ${result.nisn})`, 'success');
+        } else {
+          throw geminiErr;
+        }
       }
     } else {
       const result = await processOMRImage(videoElement.value);
@@ -1324,15 +1255,55 @@ const processBatchQueue = async () => {
 
     try {
       if (scanEngine.value === 'gemini') {
-        const dataUrl = await fileToDataUrl(batchFile.file);
-        const res = await scanWithGemini(dataUrl, selectedTemplate.value, activeModel.value);
-        if (!res.data) throw new Error(res.error || "Gagal memindai berkas.");
-        await saveScanResult({
-          ...res.data,
-          engine: 'gemini'
-        });
-        await learnFromGeminiResult(dataUrl, res.data);
-        addSessionLog('success', batchFile.file.name, `Berhasil (${activeModelLabel.value} - NISN: ${res.data.nisn})`, 'gemini');
+        let dataUrl = await fileToDataUrl(batchFile.file);
+        // Jika modul OpenCV aktif, selaraskan orientasi berkas gambar ke potret tegak (judul di atas)
+        if (cvReady.value && (window as any).cv) {
+          try {
+            const img = await loadImageFromFile(batchFile.file);
+            const norm = normalizeSourceToUprightCanvas(img, (window as any).cv);
+            dataUrl = norm.dataUrl;
+            if (norm.detectedRotation !== 0) {
+              console.info(`[Batch File] Berkas ${batchFile.file.name} diputar ${norm.detectedRotation}° menjadi tegak lurus.`);
+            }
+          } catch (normErr) {
+            console.warn('Fallback ke berkas asli:', normErr);
+          }
+        }
+        pendingImageUrl.value = dataUrl;
+        try {
+          const res = await scanWithGemini(dataUrl, selectedTemplate.value, activeModel.value);
+          if (!res.data) throw new Error(res.error || "Gagal memindai berkas.");
+          await saveScanResult({
+            ...res.data,
+            engine: 'gemini'
+          });
+          await learnFromGeminiResult(dataUrl, res.data);
+          addSessionLog('success', batchFile.file.name, `Berhasil (${activeModelLabel.value} - NISN: ${res.data.nisn})`, 'gemini');
+        } catch (geminiErr: any) {
+          const errMsg = geminiErr.message || String(geminiErr);
+          const isQuotaOrServerIssue = (
+            errMsg.includes('429') ||
+            errMsg.includes('503') ||
+            errMsg.includes('kuota') ||
+            errMsg.includes('quota') ||
+            errMsg.includes('RESOURCE_EXHAUSTED') ||
+            errMsg.includes('antrean')
+          );
+
+          if (isQuotaOrServerIssue && cvReady.value && (window as any).cv) {
+            console.warn(`[Batch File] Fallback berkas ${batchFile.file.name} ke OpenCV karena limit kuota cloud:`, errMsg);
+            const img = await loadImageFromFile(batchFile.file);
+            const result = await processOMRImage(img);
+            await saveScanResult({
+              ...result,
+              engine: 'opencv',
+              scan_notes: `${result.scan_notes || ''} (Dialihkan ke OpenCV karena batas kuota Gemini)`.trim()
+            });
+            addSessionLog('success', batchFile.file.name, `Berhasil via OpenCV lokal (NISN: ${result.nisn})`, 'opencv');
+          } else {
+            throw geminiErr;
+          }
+        }
       } else {
         const img = await loadImageFromFile(batchFile.file);
         const result = await processOMRImage(img);

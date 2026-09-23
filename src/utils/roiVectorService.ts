@@ -314,101 +314,164 @@ export function calibrateVectorRoisFromScan(
   const imgData = ctx.getImageData(0, 0, W, H);
   const data = imgData.data;
 
-  // Kumpulkan set ID bulatan yang dikonfirmasi terisi oleh Gemini
+  // 1. Kumpulkan set ID bulatan yang dikonfirmasi terisi secara presisi berdasarkan tipe blok
   const confirmedBubbleIds = new Set<string>();
 
-  // 1. Identitas vertikal
-  if (groundTruth.npsn) {
-    for (let c = 0; c < groundTruth.npsn.length; c++) {
-      const char = groundTruth.npsn[c];
-      const r = parseInt(char, 10) + 1; // row 1-10
-      confirmedBubbleIds.add(`col${c + 1}_row${r}`);
-    }
-  }
-  if (groundTruth.nisn) {
-    for (let c = 0; c < groundTruth.nisn.length; c++) {
-      const char = groundTruth.nisn[c];
-      const r = parseInt(char, 10) + 1;
-      confirmedBubbleIds.add(`col${c + 1}_row${r}`);
-    }
-  }
-
-  // 2. Jawaban soal
-  if (groundTruth.answers && Array.isArray(groundTruth.answers)) {
-    groundTruth.answers.forEach(ans => {
-      const qNum = ans.nomor_soal;
-      const jwb = Array.isArray(ans.jawaban) ? ans.jawaban : [ans.jawaban];
-      jwb.forEach(opt => {
-        if (!opt) return;
-        const oIdx = opt.charCodeAt(0) - 65; // A=0, B=1, ...
-        if (oIdx >= 0 && oIdx <= 5) {
-          confirmedBubbleIds.add(`q${qNum}_opt${oIdx}`);
+  baselineRois.forEach(b => {
+    // A. Identitas vertikal
+    if (b.blockType === 'identity_npsn' && groundTruth.npsn) {
+      const match = b.id.match(/_col(\d+)_row(\d+)/);
+      if (match) {
+        const colIdx = parseInt(match[1], 10) - 1;
+        if (colIdx >= 0 && colIdx < groundTruth.npsn.length && b.value === groundTruth.npsn[colIdx]) {
+          confirmedBubbleIds.add(b.id);
+        }
+      }
+    } else if (b.blockType === 'identity_nisn' && groundTruth.nisn) {
+      const match = b.id.match(/_col(\d+)_row(\d+)/);
+      if (match) {
+        const colIdx = parseInt(match[1], 10) - 1;
+        if (colIdx >= 0 && colIdx < groundTruth.nisn.length && b.value === groundTruth.nisn[colIdx]) {
+          confirmedBubbleIds.add(b.id);
+        }
+      }
+    } else if (b.blockType === 'identity_subject' && groundTruth.id_mapel) {
+      const match = b.id.match(/_col(\d+)_row(\d+)/);
+      if (match) {
+        const colIdx = parseInt(match[1], 10) - 1;
+        if (colIdx >= 0 && colIdx < groundTruth.id_mapel.length && b.value === groundTruth.id_mapel[colIdx]) {
+          confirmedBubbleIds.add(b.id);
+        }
+      }
+    } else if (b.blockType === 'identity_test' && groundTruth.kode_tes) {
+      const match = b.id.match(/_col(\d+)_row(\d+)/);
+      if (match) {
+        const colIdx = parseInt(match[1], 10) - 1;
+        if (colIdx >= 0 && colIdx < groundTruth.kode_tes.length && b.value === groundTruth.kode_tes[colIdx]) {
+          confirmedBubbleIds.add(b.id);
+        }
+      }
+    // B. Jawaban soal
+    } else if (groundTruth.answers && Array.isArray(groundTruth.answers)) {
+      groundTruth.answers.forEach(ans => {
+        const qNum = ans.nomor_soal;
+        if (b.id.includes(`_q${qNum}_`) || b.id.includes(`_q${qNum}_sub`)) {
+          if (b.blockType === 'bs3' || b.blockType === 'yt3') {
+            const subMatch = b.id.match(/_sub(\d+)_/);
+            if (subMatch && Array.isArray(ans.jawaban)) {
+              const subIdx = parseInt(subMatch[1], 10);
+              if (ans.jawaban[subIdx] && ans.jawaban[subIdx] === b.value) {
+                confirmedBubbleIds.add(b.id);
+              }
+            }
+          } else if (b.blockType === 'kompleks') {
+            const ansArr = Array.isArray(ans.jawaban) ? ans.jawaban : [ans.jawaban];
+            if (ansArr.includes(b.value)) {
+              confirmedBubbleIds.add(b.id);
+            }
+          } else {
+            const expected = Array.isArray(ans.jawaban) ? ans.jawaban[0] : ans.jawaban;
+            if (expected && expected !== '-' && b.value === expected) {
+              confirmedBubbleIds.add(b.id);
+            }
+          }
         }
       });
-    });
-  }
+    }
+  });
 
-  // Hitung offset rata-rata per blok
+  // 2. Hitung offset rata-rata per blok dengan deteksi centroid disk kegelapan lokal
   const blockOffsets: Record<string, { totalDx: number; totalDy: number; count: number }> = {};
+  let globalDx = 0;
+  let globalDy = 0;
+  let globalCount = 0;
 
   baselineRois.forEach(b => {
-    const isTarget = Array.from(confirmedBubbleIds).some(id => b.id.includes(id));
-    if (!isTarget) return;
+    if (!confirmedBubbleIds.has(b.id)) return;
 
     const px = Math.round(b.normX * W);
     const py = Math.round(b.normY * H);
     const pr = Math.max(4, Math.round(b.normR * W));
 
-    // Jendela pencarian lokal +-1.5 radius
-    const searchWindow = Math.round(pr * 1.5);
-    let minLuminance = 255;
+    // Jendela pencarian lokal ±16 piksel
+    const searchWindow = Math.max(14, Math.round(pr * 1.8));
+    const sampleR = Math.max(2, Math.round(pr * 0.5));
+    let maxDarkness = 0;
     let bestX = px;
     let bestY = py;
 
     for (let dy = -searchWindow; dy <= searchWindow; dy += 2) {
       for (let dx = -searchWindow; dx <= searchWindow; dx += 2) {
-        const nx = px + dx;
-        const ny = py + dy;
-        if (nx >= 0 && nx < W && ny >= 0 && ny < H) {
-          const idx = (ny * W + nx) * 4;
-          const lum = Math.round(0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2]);
-          if (lum < minLuminance) {
-            minLuminance = lum;
-            bestX = nx;
-            bestY = ny;
+        const curX = px + dx;
+        const curY = py + dy;
+
+        let darkSum = 0;
+        let count = 0;
+
+        for (let sy = -sampleR; sy <= sampleR; sy += 2) {
+          for (let sx = -sampleR; sx <= sampleR; sx += 2) {
+            if (sx * sx + sy * sy <= sampleR * sampleR) {
+              const nx = curX + sx;
+              const ny = curY + sy;
+              if (nx >= 0 && nx < W && ny >= 0 && ny < H) {
+                const idx = (ny * W + nx) * 4;
+                const lum = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+                darkSum += (255 - lum);
+                count++;
+              }
+            }
           }
+        }
+
+        const avgDark = count > 0 ? darkSum / count : 0;
+        if (avgDark > maxDarkness) {
+          maxDarkness = avgDark;
+          bestX = curX;
+          bestY = curY;
         }
       }
     }
 
-    // Jika menemukan titik gelap yang signifikan
-    if (minLuminance < 140) {
+    // Jika menemukan bulatan terisi nyata (kontras gelap > 80 di atas kertas) dengan deviasi wajar (< 25px)
+    if (maxDarkness > 80 && Math.abs(bestX - px) < 25 && Math.abs(bestY - py) < 25) {
       const dx = (bestX - px) / W;
       const dy = (bestY - py) / H;
       const blkKey = String(b.blockId);
+
       if (!blockOffsets[blkKey]) {
         blockOffsets[blkKey] = { totalDx: 0, totalDy: 0, count: 0 };
       }
       blockOffsets[blkKey].totalDx += dx;
       blockOffsets[blkKey].totalDy += dy;
       blockOffsets[blkKey].count += 1;
+
+      globalDx += dx;
+      globalDy += dy;
+      globalCount += 1;
     }
   });
 
-  // Terapkan kalibrasi ke semua bulatan
+  const avgGlobalDx = globalCount > 0 ? globalDx / globalCount : 0;
+  const avgGlobalDy = globalCount > 0 ? globalDy / globalCount : 0;
+
+  // 3. Terapkan kalibrasi ke semua bulatan
   return baselineRois.map(b => {
     const blkKey = String(b.blockId);
     const offset = blockOffsets[blkKey];
-    if (offset && offset.count > 0) {
-      const avgDx = offset.totalDx / offset.count;
-      const avgDy = offset.totalDy / offset.count;
-      return {
-        ...b,
-        normX: Math.max(0.01, Math.min(0.99, b.normX + avgDx)),
-        normY: Math.max(0.01, Math.min(0.99, b.normY + avgDy))
-      };
+
+    let applyDx = avgGlobalDx;
+    let applyDy = avgGlobalDy;
+
+    if (offset && offset.count >= 1) {
+      applyDx = offset.totalDx / offset.count;
+      applyDy = offset.totalDy / offset.count;
     }
-    return b;
+
+    return {
+      ...b,
+      normX: Math.max(0.01, Math.min(0.99, b.normX + applyDx)),
+      normY: Math.max(0.01, Math.min(0.99, b.normY + applyDy))
+    };
   });
 }
 

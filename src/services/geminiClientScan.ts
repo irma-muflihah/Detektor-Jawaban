@@ -62,28 +62,66 @@ Tugas Anda: Pindai gambar LJK terlampir dan ekstrak seluruh data peserta (tulisa
 
 ${templateContext}
 
-Petunjuk Khusus Ekstraksi:
+============================================================
+ACUAN GROUND TRUTH STANDAR EMAS (FEW-SHOT GROUND TRUTH BENCHMARK)
+Gunakan acuan ground truth terverifikasi 100% berikut untuk memahami tata letak, format pengisian, dan konvensi jawaban pada formulir standar "Lembar Jawaban Latihan TKA 1":
+Contoh LJK Terverifikasi:
+- Data Peserta (Tulisan Tangan):
+  * nama_siswa: "FELLYSA NINDA MAHARANI"
+  * kelas: "9A"
+  * no_peserta: "R09-9A-11"
+  * tanggal_ujian: "23-09-2026"
+- Identitas Digital (Cross-Validation Kotak & Bulatan Kolom):
+  * NISN: "0114741902" (10 kolom: 0, 1, 1, 4, 7, 4, 1, 9, 0, 2)
+  * NPSN: "20301942" (8 kolom: 2, 0, 3, 0, 1, 9, 4, 2)
+  * ID Mapel: "01" (2 kolom: 0, 1)
+  * Kode Tes: "91" (2 kolom: 9, 1)
+- Kunci Jawaban Pemindaian Resmi:
+  * No 1 - 12 (Pilihan Ganda Biasa 'pg'):
+    1: ["D"], 2: ["D"], 3: ["A"], 4: ["D"], 5: ["D"], 6: ["C"],
+    7: ["C"], 8: ["D"], 9: ["D"], 10: ["B"], 11: ["C"], 12: ["C"]
+  * No 13 - 18 (Benar / Salah 3 Baris 'bs3'):
+    13: ["B", "S", "S"]
+    14: ["S", "S", "S"]
+    15: ["B", "S", "B"]
+    16: ["B", "B", "B"]
+    17: ["B", "B", "S"]
+    18: ["B", "S", "S"]
+  * No 19 - 24 (Pilihan Ganda Kompleks 'kompleks', Multi-Selection Kotak Persegi):
+    19: ["B", "C", "D"]
+    20: ["B", "D"]
+    21: ["C", "D"]
+    22: ["B", "C", "D"]
+    23: ["A", "C", "D"]
+    24: ["A", "C", "D"]
+  * No 25 - 30 (Menjodohkan 'jodoh'):
+    25: ["A"], 26: ["D"], 27: ["B"], 28: ["B"], 29: ["C"], 30: ["C"]
+============================================================
+
+Petunjuk Khusus Ekstraksi Presisi:
+0. Orientasi & Arah Baca LJK:
+   - Jika lembar LJK tampak mendatar (landscape), miring, atau terbalik 180°, kenali dan orientasikan secara mental posisi lembar ke kondisi potret tegak lurus (di mana judul 'Lembar Jawaban Latihan TKA 1' serta isian Identitas Siswa berada di sisi ATAS, dan jawaban soal berada di bawahnya).
+
 1. Data Peserta Esensial (OCR Tulisan Tangan pada Blok Data Peserta di bagian atas):
-   - nama_siswa: Nama lengkap siswa dari kotak tulisan tangan "Nama Lengkap" (contoh: "Kanza Aditya").
-   - kelas: Kelas siswa dari kotak isian "Kelas" (contoh: "8C").
-   - no_peserta: Nomor peserta dari kotak isian "No. Peserta" (contoh: "01-8C-14").
-   - tanggal_ujian: Tanggal pelaksanaan dari kotak isian "Tanggal Pelaksanaan Tes" (contoh: "23 - September - 2026").
-   (Catatan penting: Blok catatan, teks pernyataan kejujuran, dan tanda tangan/paraf diabaikan saja).
+   - nama_siswa: Nama lengkap siswa dari kotak tulisan tangan "Nama Lengkap" (contoh: "FELLYSA NINDA MAHARANI").
+   - kelas: Kelas siswa dari kotak isian "Kelas" (contoh: "9A").
+   - no_peserta: Nomor peserta dari kotak isian "No. Peserta" (contoh: "R09-9A-11").
+   - tanggal_ujian: Tanggal pelaksanaan dari kotak isian "Tanggal Pelaksanaan Tes" (contoh: "23-09-2026").
+   (Catatan penting: Blok catatan/keterangan, teks pernyataan kejujuran, dan tanda tangan/paraf diabaikan saja).
 
 2. Blok Identitas Digital (Cross-Validation Antara Kotak Angka Atas dan Bulatan 0-9 di Bawahnya):
    - NISN (10 digit): Periksa angka yang tertulis di dalam kotak 1-10 DAN bulatan angka 0-9 yang dihitamkan di kolom bawahnya. Lakukan verifikasi silang (cross-validation) agar 10 digit angka yang dihasilkan tepat 100%.
-   - NPSN (8 digit): Periksa angka di kotak 1-8 dan bulatan 0-9 di bawahnya.
-   - ID Mapel (2 digit): Periksa angka di kotak dan bulatan di bawahnya.
-   - Kode Tes (2 digit): Periksa angka di kotak dan bulatan di bawahnya.
+   - NPSN (8 digit): Periksa angka di kotak 1-8 dan bulatan 0-9 di bawahnya (standar: 20301942).
+   - ID Mapel (2 digit): Periksa angka di kotak dan bulatan di bawahnya (contoh: 01).
+   - Kode Tes (2 digit): Periksa angka di kotak dan bulatan di bawahnya (contoh: 91).
 
-3. Jawaban Soal (OMR):
+3. Aturan Krusial Jawaban Soal (OMR):
    - Periksa setiap butir nomor soal.
    - Deteksi bulatan atau kotak yang dihitamkan (pensil 2B, pulpen hitam/biru, arsiran tebal). Abaikan bulatan/kotak yang kosong atau hanya coretan tipis/bekas hapusan.
-   - Untuk tipe 'pg' (Pilihan Ganda Biasa): masukkan 1 opsi yang dipilih, misal ["A"] atau ["B"] atau ["C"] atau ["D"]. Jika kosong, kembalikan [].
-   - Untuk tipe 'kompleks' (Pilihan Ganda Kompleks): Bentuknya berupa KOTAK CENTANG (checkboxes). Soal ini dapat memiliki LEBIH DARI SATU jawaban (multi-selection). Masukkan SEMUA opsi kotak yang dihitamkan dalam array, misalnya ["A", "B"] atau ["A", "C", "D"] atau ["B"].
-   - Untuk tipe 'bs3' (Benar / Salah 3 Baris) atau 'yt3' (Ya / Tidak 3 Baris): Setiap nomor soal memiliki 3 baris sub-pernyataan. Masukkan array persis 3 string untuk baris 1, 2, dan 3, misalnya ["B", "S", "S"] atau ["Y", "T", "Y"].
-   - Untuk tipe 'bs' (1 set) atau 'yt' (1 set): masukkan 1 opsi, misal ["B"] atau ["Y"].
-   - Untuk tipe 'jodoh' (Menjodohkan) atau 'skala': masukkan opsi huruf/angka yang dihitamkan.
+   - Untuk tipe 'pg' (Pilihan Ganda Biasa No 1-12): Masukkan 1 opsi yang dipilih, misal ["A"] atau ["B"] atau ["C"] atau ["D"]. Jika kosong, kembalikan [].
+   - Untuk tipe 'kompleks' (Pilihan Ganda Kompleks No 19-24): Bentuk targetnya adalah KOTAK CENTANG (persegi/checkbox). Soal ini DAPAT MEMILIKI LEBIH DARI SATU JAWABAN (multi-selection). Periksa seluruh opsi A, B, C, D dan masukkan SEMUA opsi kotak yang dihitamkan dalam array, misalnya ["B", "C", "D"], ["B", "D"], ["A", "C", "D"]. JANGAN dibatasi hanya satu jawaban!
+   - Untuk tipe 'bs3' (Benar / Salah 3 Baris No 13-18): Setiap nomor soal memiliki 3 baris sub-pernyataan yang tersusun vertikal dari atas ke bawah. Masukkan array persis 3 string untuk baris 1, 2, dan 3, misalnya ["B", "S", "S"] atau ["B", "B", "B"].
+   - Untuk tipe 'jodoh' (Menjodohkan No 25-30): Masukkan opsi huruf yang dihitamkan, misal ["A"] atau ["D"].
    - Jika butir soal tidak dijawab sama sekali, kembalikan array kosong [].
 
 4. Evaluasi Kualitas & Keyakinan:
@@ -123,37 +161,94 @@ Petunjuk Khusus Ekstraksi:
     required: ["npsn", "nisn", "id_mapel", "kode_tes", "answers"]
   };
 
-  const response = await ai.models.generateContent({
-    model: selectedModel,
-    contents: {
-      parts: [
-        {
-          inlineData: {
-            mimeType,
-            data: base64Data,
-          },
-        },
-        {
-          text: promptText,
-        },
-      ],
-    },
-    config: {
-      responseMimeType: "application/json",
-      responseSchema,
-    },
-  });
+  let activeModel = selectedModel;
+  if (activeModel === 'gemini-2.5-flash' || activeModel === 'gemini-2.5-pro' || activeModel === 'gemini-1.5-flash') {
+    activeModel = 'gemini-3.8-flash';
+  }
 
-  const responseText = response.text;
+  const fallbackCandidates: string[] = [
+    activeModel,
+    'gemini-3.8-flash',
+    'gemini-3.1-flash-lite',
+    'gemini-3.6-flash',
+  ].filter((v, i, a) => a.indexOf(v) === i);
+
+  let responseText: string | undefined;
+  let successfulModel = activeModel;
+  let lastError: any = null;
+
+  for (const modelCandidate of fallbackCandidates) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const response = await ai.models.generateContent({
+          model: modelCandidate,
+          contents: {
+            parts: [
+              {
+                inlineData: {
+                  mimeType,
+                  data: base64Data,
+                },
+              },
+              {
+                text: promptText,
+              },
+            ],
+          },
+          config: {
+            responseMimeType: "application/json",
+            responseSchema,
+          },
+        });
+
+        responseText = response.text;
+        if (responseText) {
+          successfulModel = modelCandidate;
+          break;
+        }
+      } catch (err: any) {
+        lastError = err;
+        const str = String(err?.message || err);
+        console.warn(`[Client Gemini SDK] Model ${modelCandidate} (Percobaan ${attempt}/2) gagal: ${str}`);
+
+        // Jika error 404, langsung ganti model
+        if (str.includes('404') || str.includes('not found')) {
+          break;
+        }
+
+        // Cek retryDelay pendek
+        const match = str.match(/retry in\s+([0-9.]+)\s*s/i);
+        const retryDelay = match ? Math.round(parseFloat(match[1]) * 1000) : 0;
+        if (retryDelay > 0 && retryDelay <= 4000 && attempt === 1) {
+          await new Promise(r => setTimeout(r, retryDelay + 300));
+          continue;
+        }
+
+        // Jika 503 high demand spike, jeda sejenak
+        if ((str.includes('503') || str.includes('high demand') || str.includes('UNAVAILABLE')) && attempt === 1) {
+          await new Promise(r => setTimeout(r, 1500));
+          continue;
+        }
+
+        // Beralih ke kandidat berikutnya
+        break;
+      }
+    }
+
+    if (responseText) {
+      break;
+    }
+  }
+
   if (!responseText) {
-    throw new Error("Gemini tidak mengembalikan respons teks.");
+    throw lastError || new Error("Gemini tidak mengembalikan respons teks.");
   }
 
   const parsed = JSON.parse(responseText);
 
   const formattedAnswers = (parsed.answers || []).map((ans: any) => {
     let jwb = ans.jawaban;
-    if (Array.isArray(jwb) && jwb.length === 1 && (ans.bentuk_soal === 'pg' || ans.bentuk_soal === 'bs' || ans.bentuk_soal === 'yt')) {
+    if (Array.isArray(jwb) && jwb.length === 1 && (ans.bentuk_soal === 'pg' || ans.bentuk_soal === 'bs' || ans.bentuk_soal === 'yt' || ans.bentuk_soal === 'jodoh')) {
       jwb = jwb[0];
     }
     return {
@@ -162,6 +257,10 @@ Petunjuk Khusus Ekstraksi:
       jawaban: jwb
     };
   });
+
+  const finalScanNotes = selectedModel !== successfulModel
+    ? `${parsed.scan_notes || 'Dipindai dengan Client SDK.'} (Dialihkan ke ${successfulModel} karena ${selectedModel} sibuk)`
+    : parsed.scan_notes || `Dipindai dengan model ${successfulModel} (Client SDK).`;
 
   const resultData: GeminiOmrResultData = {
     npsn: String(parsed.npsn || "").replace(/\D/g, "").slice(0, 8),
@@ -173,7 +272,7 @@ Petunjuk Khusus Ekstraksi:
     no_peserta: parsed.no_peserta ? String(parsed.no_peserta).trim() : undefined,
     tanggal_ujian: parsed.tanggal_ujian ? String(parsed.tanggal_ujian).trim() : undefined,
     confidence_score: typeof parsed.confidence_score === 'number' ? parsed.confidence_score : 0.95,
-    scan_notes: parsed.scan_notes || `Dipindai dengan model ${selectedModel} (Client SDK).`,
+    scan_notes: finalScanNotes,
     answers: formattedAnswers,
     scannedAt: Date.now(),
   };

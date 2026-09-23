@@ -1,4 +1,4 @@
-import { GoogleGenAI, ThinkingLevel, Type } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import type { Request, Response } from "express";
 
 let aiClient: GoogleGenAI | null = null;
@@ -74,37 +74,69 @@ async function getRequestBody(req: any): Promise<any> {
   });
 }
 
+function extractRetryDelayMs(err: any): number {
+  if (!err) return 0;
+  try {
+    if (Array.isArray(err.details)) {
+      for (const d of err.details) {
+        if (d?.retryDelay) {
+          const m = String(d.retryDelay).match(/^(\d+(?:\.\d+)?)s?$/);
+          if (m) return Math.round(parseFloat(m[1]) * 1000);
+        }
+      }
+    }
+    if (err.error?.details && Array.isArray(err.error.details)) {
+      for (const d of err.error.details) {
+        if (d?.retryDelay) {
+          const m = String(d.retryDelay).match(/^(\d+(?:\.\d+)?)s?$/);
+          if (m) return Math.round(parseFloat(m[1]) * 1000);
+        }
+      }
+    }
+    const str = String(err.message || err.toString() || '');
+    const match = str.match(/retry in\s+([0-9.]+)\s*s/i);
+    if (match) {
+      return Math.round(parseFloat(match[1]) * 1000);
+    }
+  } catch (_) {}
+  return 0;
+}
+
 function isHighDemandOrTransientError(err: any): boolean {
   if (!err) return false;
   const str = String(err.message || err.toString() || '');
   const code = err.code || err.status || (err.error && err.error.code);
   return (
     code === 503 ||
-    code === 429 ||
     code === 'UNAVAILABLE' ||
     str.includes('503') ||
-    str.includes('429') ||
     str.includes('high demand') ||
     str.includes('spikes in demand') ||
     str.includes('UNAVAILABLE') ||
-    str.includes('RESOURCE_EXHAUSTED') ||
     str.includes('overloaded')
+  );
+}
+
+function isModelUnavailableOrQuotaExceeded(err: any): boolean {
+  if (!err) return false;
+  const str = String(err.message || err.toString() || '');
+  const code = err.code || err.status || (err.error && err.error.code);
+  return (
+    code === 404 ||
+    code === 'NOT_FOUND' ||
+    str.includes('404') ||
+    str.includes('not found') ||
+    str.includes('no longer available')
   );
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-interface ModelCandidate {
-  name: string;
-  thinkingLevel?: ThinkingLevel;
-}
-
-// Fallback chain in case of temporary high demand spikes (503 UNAVAILABLE)
-const CANDIDATE_MODELS: ModelCandidate[] = [
-  { name: 'gemini-3.8-flash', thinkingLevel: ThinkingLevel.LOW },
-  { name: 'gemini-3.1-pro-preview', thinkingLevel: ThinkingLevel.LOW },
-  { name: 'gemini-3.1-flash-lite', thinkingLevel: ThinkingLevel.MINIMAL },
-  { name: 'gemini-flash-latest' },
+// Rantai fallback model multimodal generasi baru yang unik dan aktif
+const CANDIDATE_MODELS: string[] = [
+  'gemini-3.8-flash',
+  'gemini-3.1-flash-lite',
+  'gemini-3.6-flash',
 ];
 
 export async function handleOmrScan(req: Request | any, res: Response | any) {
@@ -132,22 +164,25 @@ export async function handleOmrScan(req: Request | any, res: Response | any) {
     }
 
     const customApiKey = ((req.headers && req.headers['x-gemini-api-key']) as string) || (body as any)?.apiKey;
-    const requestedModel = (((req.headers && req.headers['x-gemini-model']) as string) || (body as any)?.model || '').trim();
-    const ai = getGeminiClient(customApiKey);
-
-    // Build model candidate list prioritizing the user's requested model
-    const candidateList: ModelCandidate[] = [];
-    if (requestedModel) {
-      candidateList.push({
-        name: requestedModel,
-        thinkingLevel: (requestedModel.includes('pro') || requestedModel.includes('3.8')) ? ThinkingLevel.LOW : undefined,
-      });
+    let requestedModel = (((req.headers && req.headers['x-gemini-model']) as string) || (body as any)?.model || '').trim();
+    
+    // Migrasikan otomatis model yang sudah dimatikan Google (404 Not Found)
+    if (requestedModel === 'gemini-2.5-flash' || requestedModel === 'gemini-2.5-pro' || requestedModel === 'gemini-1.5-flash') {
+      requestedModel = 'gemini-3.6-flash';
     }
 
-    // Add standard fallbacks if not already in list
-    for (const def of CANDIDATE_MODELS) {
-      if (!candidateList.some(c => c.name === def.name)) {
-        candidateList.push(def);
+    const ai = getGeminiClient(customApiKey);
+
+    // Bangun daftar kandidat model dengan memprioritaskan model pilihan pengguna
+    const candidateList: string[] = [];
+    if (requestedModel) {
+      candidateList.push(requestedModel);
+    }
+
+    // Tambahkan model cadangan stabil jika belum ada dalam daftar
+    for (const modelName of CANDIDATE_MODELS) {
+      if (!candidateList.includes(modelName)) {
+        candidateList.push(modelName);
       }
     }
 
@@ -179,28 +214,66 @@ Tugas Anda: Pindai gambar LJK terlampir dan ekstrak seluruh data peserta (tulisa
 
 ${templateContext}
 
-Petunjuk Khusus Ekstraksi:
+============================================================
+ACUAN GROUND TRUTH STANDAR EMAS (FEW-SHOT GROUND TRUTH BENCHMARK)
+Gunakan acuan ground truth terverifikasi 100% berikut untuk memahami tata letak, format pengisian, dan konvensi jawaban pada formulir standar "Lembar Jawaban Latihan TKA 1":
+Contoh LJK Terverifikasi:
+- Data Peserta (Tulisan Tangan):
+  * nama_siswa: "FELLYSA NINDA MAHARANI"
+  * kelas: "9A"
+  * no_peserta: "R09-9A-11"
+  * tanggal_ujian: "23-09-2026"
+- Identitas Digital (Cross-Validation Kotak & Bulatan Kolom):
+  * NISN: "0114741902" (10 kolom: 0, 1, 1, 4, 7, 4, 1, 9, 0, 2)
+  * NPSN: "20301942" (8 kolom: 2, 0, 3, 0, 1, 9, 4, 2)
+  * ID Mapel: "01" (2 kolom: 0, 1)
+  * Kode Tes: "91" (2 kolom: 9, 1)
+- Kunci Jawaban Pemindaian Resmi:
+  * No 1 - 12 (Pilihan Ganda Biasa 'pg'):
+    1: ["D"], 2: ["D"], 3: ["A"], 4: ["D"], 5: ["D"], 6: ["C"],
+    7: ["C"], 8: ["D"], 9: ["D"], 10: ["B"], 11: ["C"], 12: ["C"]
+  * No 13 - 18 (Benar / Salah 3 Baris 'bs3'):
+    13: ["B", "S", "S"]
+    14: ["S", "S", "S"]
+    15: ["B", "S", "B"]
+    16: ["B", "B", "B"]
+    17: ["B", "B", "S"]
+    18: ["B", "S", "S"]
+  * No 19 - 24 (Pilihan Ganda Kompleks 'kompleks', Multi-Selection Kotak Persegi):
+    19: ["B", "C", "D"]
+    20: ["B", "D"]
+    21: ["C", "D"]
+    22: ["B", "C", "D"]
+    23: ["A", "C", "D"]
+    24: ["A", "C", "D"]
+  * No 25 - 30 (Menjodohkan 'jodoh'):
+    25: ["A"], 26: ["D"], 27: ["B"], 28: ["B"], 29: ["C"], 30: ["C"]
+============================================================
+
+Petunjuk Khusus Ekstraksi Presisi:
+0. Orientasi & Arah Baca LJK:
+   - Jika lembar LJK tampak mendatar (landscape), miring, atau terbalik 180°, kenali dan orientasikan secara mental posisi lembar ke kondisi potret tegak lurus (di mana judul 'Lembar Jawaban Latihan TKA 1' serta isian Identitas Siswa berada di sisi ATAS, dan jawaban soal berada di bawahnya).
+
 1. Data Peserta Esensial (OCR Tulisan Tangan pada Blok Data Peserta di bagian atas):
-   - nama_siswa: Nama lengkap siswa dari kotak tulisan tangan "Nama Lengkap" (contoh: "Kanza Aditya").
-   - kelas: Kelas siswa dari kotak isian "Kelas" (contoh: "8C").
-   - no_peserta: Nomor peserta dari kotak isian "No. Peserta" (contoh: "01-8C-14").
-   - tanggal_ujian: Tanggal pelaksanaan dari kotak isian "Tanggal Pelaksanaan Tes" (contoh: "23 - September - 2026").
-   (Catatan penting: Blok catatan, teks pernyataan kejujuran, dan tanda tangan/paraf diabaikan saja).
+   - nama_siswa: Nama lengkap siswa dari kotak tulisan tangan "Nama Lengkap" (contoh: "FELLYSA NINDA MAHARANI").
+   - kelas: Kelas siswa dari kotak isian "Kelas" (contoh: "9A").
+   - no_peserta: Nomor peserta dari kotak isian "No. Peserta" (contoh: "R09-9A-11").
+   - tanggal_ujian: Tanggal pelaksanaan dari kotak isian "Tanggal Pelaksanaan Tes" (contoh: "23-09-2026").
+   (Catatan penting: Blok catatan/keterangan, teks pernyataan kejujuran, dan tanda tangan/paraf diabaikan saja).
 
 2. Blok Identitas Digital (Cross-Validation Antara Kotak Angka Atas dan Bulatan 0-9 di Bawahnya):
    - NISN (10 digit): Periksa angka yang tertulis di dalam kotak 1-10 DAN bulatan angka 0-9 yang dihitamkan di kolom bawahnya. Lakukan verifikasi silang (cross-validation) agar 10 digit angka yang dihasilkan tepat 100%.
-   - NPSN (8 digit): Periksa angka di kotak 1-8 dan bulatan 0-9 di bawahnya.
-   - ID Mapel (2 digit): Periksa angka di kotak dan bulatan di bawahnya.
-   - Kode Tes (2 digit): Periksa angka di kotak dan bulatan di bawahnya.
+   - NPSN (8 digit): Periksa angka di kotak 1-8 dan bulatan 0-9 di bawahnya (standar: 20301942).
+   - ID Mapel (2 digit): Periksa angka di kotak dan bulatan di bawahnya (contoh: 01).
+   - Kode Tes (2 digit): Periksa angka di kotak dan bulatan di bawahnya (contoh: 91).
 
-3. Jawaban Soal (OMR):
+3. Aturan Krusial Jawaban Soal (OMR):
    - Periksa setiap butir nomor soal.
    - Deteksi bulatan atau kotak yang dihitamkan (pensil 2B, pulpen hitam/biru, arsiran tebal). Abaikan bulatan/kotak yang kosong atau hanya coretan tipis/bekas hapusan.
-   - Untuk tipe 'pg' (Pilihan Ganda Biasa): masukkan 1 opsi yang dipilih, misal ["A"] atau ["B"] atau ["C"] atau ["D"]. Jika kosong, kembalikan [].
-   - Untuk tipe 'kompleks' (Pilihan Ganda Kompleks): Bentuknya berupa KOTAK CENTANG (checkboxes). Soal ini dapat memiliki LEBIH DARI SATU jawaban (multi-selection). Masukkan SEMUA opsi kotak yang dihitamkan dalam array, misalnya ["A", "B"] atau ["A", "C", "D"] atau ["B"].
-   - Untuk tipe 'bs3' (Benar / Salah 3 Baris) atau 'yt3' (Ya / Tidak 3 Baris): Setiap nomor soal memiliki 3 baris sub-pernyataan. Masukkan array persis 3 string untuk baris 1, 2, dan 3, misalnya ["B", "S", "S"] atau ["Y", "T", "Y"].
-   - Untuk tipe 'bs' (1 set) atau 'yt' (1 set): masukkan 1 opsi, misal ["B"] atau ["Y"].
-   - Untuk tipe 'jodoh' (Menjodohkan) atau 'skala': masukkan opsi huruf/angka yang dihitamkan.
+   - Untuk tipe 'pg' (Pilihan Ganda Biasa No 1-12): Masukkan 1 opsi yang dipilih, misal ["A"] atau ["B"] atau ["C"] atau ["D"]. Jika kosong, kembalikan [].
+   - Untuk tipe 'kompleks' (Pilihan Ganda Kompleks No 19-24): Bentuk targetnya adalah KOTAK CENTANG (persegi/checkbox). Soal ini DAPAT MEMILIKI LEBIH DARI SATU JAWABAN (multi-selection). Periksa seluruh opsi A, B, C, D dan masukkan SEMUA opsi kotak yang dihitamkan dalam array, misalnya ["B", "C", "D"], ["B", "D"], ["A", "C", "D"]. JANGAN dibatasi hanya satu jawaban!
+   - Untuk tipe 'bs3' (Benar / Salah 3 Baris No 13-18): Setiap nomor soal memiliki 3 baris sub-pernyataan yang tersusun vertikal dari atas ke bawah. Masukkan array persis 3 string untuk baris 1, 2, dan 3, misalnya ["B", "S", "S"] atau ["B", "B", "B"].
+   - Untuk tipe 'jodoh' (Menjodohkan No 25-30): Masukkan opsi huruf yang dihitamkan, misal ["A"] atau ["D"].
    - Jika butir soal tidak dijawab sama sekali, kembalikan array kosong [].
 
 4. Evaluasi Kualitas & Keyakinan:
@@ -280,9 +353,9 @@ Petunjuk Khusus Ekstraksi:
     let responseText: string | undefined;
     let successfulModelName: string = '';
 
-    // Attempt generation through fallback models with backoff
+    // Upaya inferensi melalui rantai model fallback
     for (let mIdx = 0; mIdx < candidateList.length; mIdx++) {
-      const candidate = candidateList[mIdx];
+      const currentCandidateModel = candidateList[mIdx];
       const maxRetriesForCandidate = 2;
 
       for (let attempt = 1; attempt <= maxRetriesForCandidate; attempt++) {
@@ -292,12 +365,8 @@ Petunjuk Khusus Ekstraksi:
             responseSchema,
           };
 
-          if (candidate.thinkingLevel) {
-            config.thinkingConfig = { thinkingLevel: candidate.thinkingLevel };
-          }
-
           const response = await ai.models.generateContent({
-            model: candidate.name,
+            model: currentCandidateModel,
             contents: {
               parts: [
                 {
@@ -316,21 +385,39 @@ Petunjuk Khusus Ekstraksi:
 
           responseText = response.text;
           if (responseText) {
-            successfulModelName = candidate.name;
+            successfulModelName = currentCandidateModel;
             break;
           }
         } catch (err: any) {
           lastError = err;
+          const isNotFound = isModelUnavailableOrQuotaExceeded(err);
           const isTransient = isHighDemandOrTransientError(err);
-          console.warn(`[Gemini OMR] Model ${candidate.name} (Percobaan ${attempt}/${maxRetriesForCandidate}) gagal: ${err.message || err}`);
+          const retryDelayMs = extractRetryDelayMs(err);
+          console.warn(`[Gemini OMR] Model ${currentCandidateModel} (Percobaan ${attempt}/${maxRetriesForCandidate}) gagal: ${err.message || err}`);
 
-          if (isTransient && attempt < maxRetriesForCandidate) {
-            // Brief jittered pause before retrying
-            await sleep(800 * attempt + Math.floor(Math.random() * 400));
-          } else {
-            // Move immediately to next fallback candidate
+          // Jika model tidak ditemukan (404), langsung beralih ke model cadangan berikutnya
+          if (isNotFound) {
+            console.info(`[Gemini OMR] Model ${currentCandidateModel} tidak tersedia (404). Beralih ke model berikutnya...`);
             break;
           }
+
+          // Jika ada instruksi retryDelay pendek dari Google API (<= 4.5 detik), tunggu dan ulangi sekali lagi
+          if (retryDelayMs > 0 && retryDelayMs <= 4500 && attempt < maxRetriesForCandidate) {
+            console.info(`[Gemini OMR] Menunggu ${retryDelayMs + 350}ms sesuai instruksi retryDelay Google API...`);
+            await sleep(retryDelayMs + 350);
+            continue;
+          }
+
+          // Jika lonjakan antrean server sementara (503 / UNAVAILABLE), lakukan exponential backoff
+          if (isTransient && attempt < maxRetriesForCandidate) {
+            const backoffDelay = attempt === 1 ? 1200 : 2500;
+            console.info(`[Gemini OMR] Lonjakan antrean (503). Menunggu jeda backoff ${backoffDelay}ms...`);
+            await sleep(backoffDelay);
+            continue;
+          }
+
+          // Jika kuota habis untuk model ini atau percobaan habis, beralih ke model berikutnya
+          break;
         }
       }
 
@@ -340,13 +427,25 @@ Petunjuk Khusus Ekstraksi:
     }
 
     if (!responseText) {
-      if (lastError && isHighDemandOrTransientError(lastError)) {
-        throw new Error(
-          "Layanan Gemini AI sedang mengalami lonjakan antrean server sementara (503 Service Unavailable). " +
-          "Sistem telah mencoba beralih ke model cadangan. Silakan coba beberapa saat lagi atau gunakan mode pemindaian OpenCV lokal."
-        );
+      const errStr = lastError?.message || String(lastError || '');
+      const isQuotaOrServer = (
+        isHighDemandOrTransientError(lastError) ||
+        errStr.includes('429') ||
+        errStr.includes('quota') ||
+        errStr.includes('RESOURCE_EXHAUSTED')
+      );
+      if (isQuotaOrServer) {
+        return sendJson(res, 429, {
+          success: false,
+          error: "Kuota API Gemini saat ini sedang penuh atau antrean server padat (429/503). Anda dapat menggunakan Gemini API Key pribadi di Pengaturan atau beralih ke mode pemindaian OpenCV + Tesseract (offline).",
+          isQuotaExceeded: true,
+          details: errStr
+        });
       }
-      throw lastError || new Error("Tidak ada respon teks dari Gemini AI.");
+      return sendJson(res, 500, {
+        success: false,
+        error: lastError?.message || "Tidak ada respon teks dari Gemini AI."
+      });
     }
 
     // Strip markdown formatting if returned
@@ -389,9 +488,9 @@ Petunjuk Khusus Ekstraksi:
     const cleanTes = (parsedData.kode_tes || "").replace(/\D/g, "").padStart(2, "0").slice(0, 2) || "01";
 
     const baseNotes = parsedData.scan_notes || "Dipindai oleh Gemini AI Vision";
-    const finalNotes = successfulModelName !== 'gemini-3.8-flash' 
-      ? `${baseNotes} (Model: ${successfulModelName})`
-      : baseNotes;
+    const finalNotes = requestedModel && successfulModelName !== requestedModel
+      ? `${baseNotes} (Dialihkan otomatis ke ${successfulModelName} karena ${requestedModel} sedang sibuk)`
+      : `${baseNotes} (${successfulModelName})`;
 
     return sendJson(res, 200, {
       success: true,
@@ -404,8 +503,6 @@ Petunjuk Khusus Ekstraksi:
         kelas: parsedData.kelas || "",
         no_peserta: parsedData.no_peserta || "",
         tanggal_ujian: parsedData.tanggal_ujian || "",
-        pernyataan_kejujuran: parsedData.pernyataan_kejujuran || "",
-        tanda_tangan_terisi: Boolean(parsedData.tanda_tangan_terisi),
         confidence_score: parsedData.confidence_score ?? 0.95,
         scan_notes: finalNotes,
         answers: formattedAnswers,

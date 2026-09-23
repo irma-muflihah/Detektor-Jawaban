@@ -115,6 +115,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { useOmrStore } from './store/omrStore';
 import { exportSvgToPdf } from './utils/pdfExport';
+import { seedGroundTruthIfMissing } from './db/database';
 import GeminiSettingsDialog from './components/GeminiSettingsDialog.vue';
 
 const isDark = ref(false);
@@ -158,6 +159,7 @@ const printPage = () => {
 };
 
 onMounted(() => {
+  seedGroundTruthIfMissing();
   if ((window as any).cvLoaded) {
     cvReady.value = true;
   } else {

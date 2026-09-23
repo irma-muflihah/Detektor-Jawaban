@@ -7,9 +7,26 @@ import '@mdi/font/css/materialdesignicons.css';
 import 'vuetify/styles';
 import './style.css';
 
-const resizeObserverLoopErrRE = /^[a-zA-Z0-9 ]*ResizeObserver loop [a-zA-Z0-9 ]*/;
+// Redam peringatan jinak ResizeObserver loop dari peramban
+const isResizeObserverError = (msg: unknown) => {
+  if (!msg) return false;
+  const str = String(msg);
+  return (
+    str.includes('ResizeObserver loop') ||
+    str.includes('undelivered notifications')
+  );
+};
+
 window.addEventListener('error', (e) => {
-  if (resizeObserverLoopErrRE.test(e.message)) {
+  if (isResizeObserverError(e.message) || isResizeObserverError(e.error?.message)) {
+    e.stopImmediatePropagation();
+    e.preventDefault();
+    return true;
+  }
+});
+
+window.addEventListener('unhandledrejection', (e) => {
+  if (isResizeObserverError(e.reason?.message) || isResizeObserverError(e.reason)) {
     e.stopImmediatePropagation();
     e.preventDefault();
   }

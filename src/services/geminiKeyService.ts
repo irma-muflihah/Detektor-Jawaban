@@ -18,46 +18,43 @@ export const GEMINI_MODEL_PRESETS: ModelPreset[] = [
   {
     id: 'gemini-3.8-flash',
     name: 'Gemini 3.8 Flash',
-    badge: 'Rekomendasi',
-    description: 'Generasi terbaru: seimbang, sangat cepat, hemat token, dan akurasi tinggi.',
-  },
-  {
-    id: 'gemini-3.1-pro-preview',
-    name: 'Gemini 3.1 Pro (Preview)',
-    badge: 'Advanced AI',
-    description: 'Kemampuan penalaran mendalam (deep reasoning) untuk OCR tulisan tangan sulit & LJK kompleks.',
-    isAdvanced: true,
-  },
-  {
-    id: 'gemini-2.5-pro',
-    name: 'Gemini 2.5 Pro',
-    badge: 'Pro',
-    description: 'Akurasi tingkat lanjut untuk deteksi arsir pensil tipis dan evaluasi optik.',
-    isAdvanced: true,
-  },
-  {
-    id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash',
-    badge: 'Stabil',
-    description: 'Model multimodal stabil dan cepat.',
+    badge: 'Rekomendasi Utama',
+    description: 'Generasi multimodal resmi terkini dengan penalaran mendalam dan presisi ekstraksi tinggi.',
   },
   {
     id: 'gemini-3.1-flash-lite',
     name: 'Gemini 3.1 Flash Lite',
-    badge: 'Super Cepat',
-    description: 'Latensi terendah, optimal untuk pemindaian massal cepat.',
+    badge: 'Super Cepat & Kuota Luas',
+    description: 'Latensi terendah, alokasi kuota luas, optimal untuk pemindaian massal berkelanjutan.',
   },
   {
-    id: 'gemini-flash-latest',
-    name: 'Gemini Flash Latest',
-    badge: 'Auto Update',
-    description: 'Otomatis menggunakan rilis stabil Gemini Flash terkini.',
+    id: 'gemini-3.6-flash',
+    name: 'Gemini 3.6 Flash',
+    badge: 'Cadangan Cepat',
+    description: 'Model multimodal alternatif untuk pemindaian presisi tinggi.',
+  },
+  {
+    id: 'gemini-3.1-pro-preview',
+    name: 'Gemini 3.1 Pro (Preview)',
+    badge: 'Perlu Kunci Berbayar',
+    description: 'Penalaran mendalam untuk LJK sulit. Memerlukan API key dengan kuota/billing aktif Google Cloud.',
+    isAdvanced: true,
   },
 ];
 
+export function getStoredModel(): string {
+  const stored = (localStorage.getItem(MODEL_STORAGE_KEY) || '').trim();
+  // Migrasikan model deprecated yang telah dimatikan Google (404 Not Found)
+  if (!stored || stored === 'gemini-2.5-flash' || stored === 'gemini-2.5-pro' || stored === 'gemini-1.5-flash') {
+    localStorage.setItem(MODEL_STORAGE_KEY, DEFAULT_GEMINI_MODEL);
+    return DEFAULT_GEMINI_MODEL;
+  }
+  return stored;
+}
+
 // Reactive states
 const currentApiKey = ref<string>(localStorage.getItem(API_KEY_STORAGE_KEY) || '');
-const currentModel = ref<string>(localStorage.getItem(MODEL_STORAGE_KEY) || DEFAULT_GEMINI_MODEL);
+const currentModel = ref<string>(getStoredModel());
 
 export function getStoredApiKey(): string {
   return (localStorage.getItem(API_KEY_STORAGE_KEY) || '').trim();
@@ -78,12 +75,11 @@ export function removeStoredApiKey(): void {
   currentApiKey.value = '';
 }
 
-export function getStoredModel(): string {
-  return (localStorage.getItem(MODEL_STORAGE_KEY) || DEFAULT_GEMINI_MODEL).trim();
-}
-
 export function setStoredModel(model: string): void {
-  const trimmed = model.trim() || DEFAULT_GEMINI_MODEL;
+  let trimmed = model.trim() || DEFAULT_GEMINI_MODEL;
+  if (trimmed === 'gemini-2.5-flash' || trimmed === 'gemini-2.5-pro') {
+    trimmed = DEFAULT_GEMINI_MODEL;
+  }
   localStorage.setItem(MODEL_STORAGE_KEY, trimmed);
   currentModel.value = trimmed;
 }
