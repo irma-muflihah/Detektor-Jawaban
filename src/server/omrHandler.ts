@@ -97,6 +97,7 @@ interface ModelCandidate {
 // Fallback chain in case of temporary high demand spikes (503 UNAVAILABLE)
 const CANDIDATE_MODELS: ModelCandidate[] = [
   { name: 'gemini-3.8-flash', thinkingLevel: ThinkingLevel.LOW },
+  { name: 'gemini-3.1-pro-preview', thinkingLevel: ThinkingLevel.LOW },
   { name: 'gemini-3.1-flash-lite', thinkingLevel: ThinkingLevel.MINIMAL },
   { name: 'gemini-flash-latest' },
 ];
@@ -150,27 +151,38 @@ ${JSON.stringify(
 )}`;
     }
 
-    const promptText = `Anda adalah asisten AI spesialis Optical Mark Recognition (OMR) untuk Lembar Jawab Komputer (LJK) Indonesia.
-Tugas Anda: Pindai gambar LJK terlampir dan ekstrak identitas siswa serta jawaban soal yang dihitamkan dengan sangat akurat.
+    const promptText = `Anda adalah asisten AI spesialis Optical Mark Recognition (OMR) dan Optical Character Recognition (OCR) presisi tinggi untuk Lembar Jawab Komputer (LJK) Indonesia.
+Tugas Anda: Pindai gambar LJK terlampir dan ekstrak seluruh data peserta (tulisan tangan), identitas digital (kotak angka dan bulatan hitam), serta jawaban soal yang dihitamkan dengan sangat akurat.
 
 ${templateContext}
 
-Petunjuk Khusus:
-1. NPSN (Nomor Pokok Sekolah Nasional):
-   - Ekstrak 8 digit angka. Jika pada templat ada nilai awal (prefillValue misalnya "20301942"), gunakan nilai tersebut bila bulatan sesuai atau terisi.
-2. NISN (Nomor Induk Siswa Nasional):
-   - Ekstrak 10 digit angka dari kolom NISN (bulatan 0-9 yang diarsir/dihitamkan per kolom).
-3. ID Mapel & Kode Tes:
-   - Masing-masing terdiri dari 2 digit angka.
-4. Jawaban Soal:
+Petunjuk Khusus Ekstraksi:
+1. Data Peserta (OCR Tulisan Tangan pada Blok Data Peserta di bagian atas):
+   - nama_siswa: Nama lengkap siswa dari kotak tulisan tangan "Nama Lengkap" (contoh: "Kanza Aditya").
+   - kelas: Kelas siswa dari kotak isian "Kelas" (contoh: "8C").
+   - no_peserta: Nomor peserta dari kotak isian "No. Peserta" (contoh: "01-8C-14").
+   - tanggal_ujian: Tanggal pelaksanaan dari kotak isian "Tanggal Pelaksanaan Tes" (contoh: "23 - September - 2026").
+   - pernyataan_kejujuran: Kalimat pernyataan yang disalin/ditulis siswa pada kotak "Pernyataan Kejujuran" (contoh: "Saya mengerjakan tes dengan jujur").
+   - tanda_tangan_terisi: Nilai boolean (true jika ada goresan tanda tangan / paraf pada kotak "Tanda Tangan", false jika kosong).
+
+2. Blok Identitas Digital (Cross-Validation Antara Kotak Angka Atas dan Bulatan 0-9 di Bawahnya):
+   - NISN (10 digit): Periksa angka yang tertulis di dalam kotak 1-10 DAN bulatan angka 0-9 yang dihitamkan di kolom bawahnya. Lakukan verifikasi silang (cross-validation) agar 10 digit angka yang dihasilkan tepat 100%.
+   - NPSN (8 digit): Periksa angka di kotak 1-8 dan bulatan 0-9 di bawahnya.
+   - ID Mapel (2 digit): Periksa angka di kotak dan bulatan di bawahnya.
+   - Kode Tes (2 digit): Periksa angka di kotak dan bulatan di bawahnya.
+
+3. Jawaban Soal (OMR):
    - Periksa setiap butir nomor soal.
-   - Deteksi bulatan yang dihitamkan (pensil 2B, pulpen, arsiran jelas).
-   - Abaikan bulatan kosong.
-   - Untuk tipe 'pg' (pilihan ganda biasa), 'bs' (benar/salah), atau 'yt' (ya/tidak): masukkan 1 opsi yang dipilih, misal ["A"], ["B"], atau ["Y"]. Jika tidak ada yang diisi, kosongkan array jawaban: [].
-   - Untuk tipe 'kompleks': masukkan semua opsi yang dipilih, misal ["A", "C"].
-   - Untuk tipe 'bs3' (BS 3 baris) atau 'yt3' (YT 3 baris): masukkan opsi terisi per sub-pernyataan (panjang 3), misal ["B", "S", "B"] atau ["Y", "T", "Y"].
-   - Untuk tipe 'jodoh' (menjodohkan) atau 'skala': masukkan opsi yang dipilih per nomor.
-5. Kembalikan confidence_score (0.0 - 1.0) dan scan_notes catatan singkat tentang kualitas gambar/pengisian.`;
+   - Deteksi bulatan atau kotak yang dihitamkan (pensil 2B, pulpen hitam/biru, arsiran tebal). Abaikan bulatan/kotak yang kosong atau hanya coretan tipis/bekas hapusan.
+   - Untuk tipe 'pg' (Pilihan Ganda Biasa): masukkan 1 opsi yang dipilih, misal ["A"] atau ["B"] atau ["C"] atau ["D"]. Jika kosong, kembalikan [].
+   - Untuk tipe 'kompleks' (Pilihan Ganda Kompleks): Bentuknya berupa KOTAK CENTANG (checkboxes). Soal ini dapat memiliki LEBIH DARI SATU jawaban (multi-selection). Masukkan SEMUA opsi kotak yang dihitamkan dalam array, misalnya ["A", "B"] atau ["A", "C", "D"] atau ["B"].
+   - Untuk tipe 'bs3' (Benar / Salah 3 Baris) atau 'yt3' (Ya / Tidak 3 Baris): Setiap nomor soal memiliki 3 baris sub-pernyataan. Masukkan array persis 3 string untuk baris 1, 2, dan 3, misalnya ["B", "S", "S"] atau ["Y", "T", "Y"].
+   - Untuk tipe 'bs' (1 set) atau 'yt' (1 set): masukkan 1 opsi, misal ["B"] atau ["Y"].
+   - Untuk tipe 'jodoh' (Menjodohkan) atau 'skala': masukkan opsi huruf/angka yang dihitamkan.
+   - Jika butir soal tidak dijawab sama sekali, kembalikan array kosong [].
+
+4. Evaluasi Kualitas & Keyakinan:
+   - Kembalikan confidence_score (0.0 - 1.0) dan scan_notes catatan singkat mengenai kualitas citra, ketebalan pengisian, dan kejelasan tulisan tangan.`;
 
     const responseSchema = {
       type: Type.OBJECT,
@@ -193,7 +205,27 @@ Petunjuk Khusus:
         },
         nama_siswa: {
           type: Type.STRING,
-          description: "Nama lengkap siswa jika terbaca",
+          description: "Nama lengkap siswa dari tulisan tangan",
+        },
+        kelas: {
+          type: Type.STRING,
+          description: "Kelas siswa dari tulisan tangan (misal: '8C')",
+        },
+        no_peserta: {
+          type: Type.STRING,
+          description: "Nomor peserta ujian dari tulisan tangan (misal: '01-8C-14')",
+        },
+        tanggal_ujian: {
+          type: Type.STRING,
+          description: "Tanggal pelaksanaan ujian dari tulisan tangan (misal: '23 - September - 2026')",
+        },
+        pernyataan_kejujuran: {
+          type: Type.STRING,
+          description: "Isi kalimat tulisan tangan pada kotak pernyataan kejujuran",
+        },
+        tanda_tangan_terisi: {
+          type: Type.BOOLEAN,
+          description: "Apakah kotak tanda tangan terisi goresan tanda tangan/paraf (true/false)",
         },
         confidence_score: {
           type: Type.NUMBER,
@@ -220,7 +252,7 @@ Petunjuk Khusus:
               jawaban: {
                 type: Type.ARRAY,
                 items: { type: Type.STRING },
-                description: "Daftar opsi yang dihitamkan (misal ['A'] atau ['A','C'] atau ['B','S','B'] atau ['Y','T','Y'])",
+                description: "Daftar opsi yang dihitamkan (misal ['A'] atau ['A','B'] atau ['B','S','S'])",
               },
             },
             required: ["nomor_soal", "bentuk_soal", "jawaban"],
@@ -316,7 +348,7 @@ Petunjuk Khusus:
       const bType = ans.bentuk_soal || 'pg';
       let formattedJawaban: any = ans.jawaban;
 
-      if (bType === 'kompleks' || bType === 'bs3') {
+      if (bType === 'kompleks' || bType === 'bs3' || bType === 'yt3') {
         formattedJawaban = Array.isArray(ans.jawaban) ? ans.jawaban : [];
       } else {
         // Single choice: if array with elements, take first, else '-'
@@ -355,6 +387,11 @@ Petunjuk Khusus:
         id_mapel: cleanMapel,
         kode_tes: cleanTes,
         nama_siswa: parsedData.nama_siswa || "",
+        kelas: parsedData.kelas || "",
+        no_peserta: parsedData.no_peserta || "",
+        tanggal_ujian: parsedData.tanggal_ujian || "",
+        pernyataan_kejujuran: parsedData.pernyataan_kejujuran || "",
+        tanda_tangan_terisi: Boolean(parsedData.tanda_tangan_terisi),
         confidence_score: parsedData.confidence_score ?? 0.95,
         scan_notes: finalNotes,
         answers: formattedAnswers,

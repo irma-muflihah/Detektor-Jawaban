@@ -94,6 +94,17 @@
         </span>
       </template>
 
+      <template v-slot:item.actions="{ item }">
+        <v-btn
+          icon="mdi-delete-outline"
+          size="small"
+          variant="text"
+          color="error"
+          title="Hapus data penilaian ini"
+          @click.stop="openDialogDeleteSingle(item)"
+        ></v-btn>
+      </template>
+
       <template v-slot:no-data>
         <div class="text-center pa-8 text-grey">
           <v-icon size="48" class="mb-2 opacity-50">mdi-database-remove</v-icon>
@@ -178,6 +189,58 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Dialog Konfirmasi Hapus Penilaian Tunggal -->
+    <v-dialog v-model="dialogDeleteSingle" max-width="440">
+      <v-card class="rounded-xl border" elevation="4">
+        <v-card-title class="pa-4 bg-red-lighten-5 text-error d-flex align-center font-weight-bold">
+          <v-icon start icon="mdi-delete-alert" class="mr-2"></v-icon>
+          Hapus Data Penilaian?
+        </v-card-title>
+        <v-card-text class="pa-4">
+          <p class="text-body-2 text-grey-darken-3 mb-3">
+            Apakah Anda yakin ingin menghapus data nilai siswa berikut?
+          </p>
+          <div class="bg-grey-lighten-4 pa-3 rounded-lg border text-caption">
+            <div class="d-flex justify-space-between mb-1">
+              <span class="text-grey-darken-1">NISN:</span>
+              <strong class="font-weight-bold text-grey-darken-3">{{ itemToDelete?.nisn || '-' }}</strong>
+            </div>
+            <div class="d-flex justify-space-between mb-1">
+              <span class="text-grey-darken-1">NPSN:</span>
+              <strong class="font-weight-bold text-grey-darken-3">{{ itemToDelete?.npsn || '-' }}</strong>
+            </div>
+            <div class="d-flex justify-space-between mb-1">
+              <span class="text-grey-darken-1">Mapel / Kode Tes:</span>
+              <strong class="font-weight-bold text-grey-darken-3">ID {{ itemToDelete?.id_mapel || '-' }} / {{ itemToDelete?.kode_tes || '-' }}</strong>
+            </div>
+            <div class="d-flex justify-space-between mb-1">
+              <span class="text-grey-darken-1">Nilai Akhir:</span>
+              <strong class="font-weight-bold text-success">{{ itemToDelete?.nilai !== undefined ? itemToDelete?.nilai : '-' }}</strong>
+            </div>
+          </div>
+          <p class="text-caption text-error font-weight-medium mt-3 mb-0">
+            * Data penilaian siswa ini akan dihapus dari riwayat koreksi.
+          </p>
+        </v-card-text>
+        <v-card-actions class="pa-4 border-t bg-grey-lighten-5 d-flex justify-end gap-2">
+          <v-btn variant="text" color="grey-darken-1" rounded="pill" @click="dialogDeleteSingle = false">
+            Batal
+          </v-btn>
+          <v-btn
+            color="error"
+            variant="flat"
+            rounded="pill"
+            class="px-5 font-weight-bold"
+            prepend-icon="mdi-delete"
+            :loading="isDeletingSingle"
+            @click="executeDeleteSingle"
+          >
+            Hapus Nilai
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-container>
 
 </template>
@@ -194,6 +257,51 @@ const confirmDeleteText = ref('');
 const dialogDeleteSpecific = ref(false);
 const deleteIdMapel = ref('');
 const deleteKodeTes = ref('');
+
+const dialogDeleteSingle = ref(false);
+const itemToDelete = ref<ScoreResult | null>(null);
+const isDeletingSingle = ref(false);
+
+const openDialogDeleteSingle = (item: any) => {
+  const target: ScoreResult = (item && item.raw) ? item.raw : item;
+  if (!target) return;
+  itemToDelete.value = target;
+  dialogDeleteSingle.value = true;
+};
+
+const executeDeleteSingle = async () => {
+  if (!itemToDelete.value) return;
+  isDeletingSingle.value = true;
+  const target = itemToDelete.value;
+  try {
+    const npsn = String(target.npsn ?? '').trim();
+    const idMapel = String(target.id_mapel ?? '').trim();
+    const kodeTes = String(target.kode_tes ?? '').trim();
+    const nisn = String(target.nisn ?? '').trim();
+
+    // Hapus via compound primary key
+    await db.scoreResults.delete([npsn, idMapel, kodeTes, nisn]);
+
+    // Fallback filter
+    await db.scoreResults
+      .filter(r => 
+        String(r.npsn).trim() === npsn &&
+        String(r.id_mapel).trim() === idMapel &&
+        String(r.kode_tes).trim() === kodeTes &&
+        String(r.nisn).trim() === nisn
+      )
+      .delete();
+
+    omrStore.showToast(`Data nilai siswa NISN ${nisn} berhasil dihapus`, 'success');
+    dialogDeleteSingle.value = false;
+    itemToDelete.value = null;
+    await loadHistory();
+  } catch (e: any) {
+    omrStore.showToast('Gagal menghapus data nilai: ' + e.message, 'error');
+  } finally {
+    isDeletingSingle.value = false;
+  }
+};
 
 const dialogKoreksi = ref(false);
 const kunciId = ref<string>('');
@@ -387,6 +495,7 @@ const tableHeaders = computed(() => {
   for (const n of scoredQuestions.value) {
     headers.push({ title: `S${n}`, key: `soal_${n}`, sortable: false });
   }
+  headers.push({ title: 'Aksi', key: 'actions', sortable: false });
   return headers;
 });
 

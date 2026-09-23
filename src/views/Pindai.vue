@@ -321,16 +321,88 @@
               </div>
             </div>
 
-            <!-- Identity Grid -->
+            <!-- Identity Grid (OCR Tulisan Tangan & OMR Digital) -->
             <div class="bg-white rounded-lg border pa-3">
+              <div class="text-caption font-weight-bold text-grey-darken-2 mb-2 text-uppercase d-flex align-center justify-space-between">
+                <span>Profil Peserta (OCR Tulisan Tangan)</span>
+                <v-chip
+                  size="x-small"
+                  :color="pendingAiResult.tanda_tangan_terisi ? 'success' : 'warning'"
+                  variant="flat"
+                  class="font-weight-bold"
+                >
+                  <v-icon start :icon="pendingAiResult.tanda_tangan_terisi ? 'mdi-draw' : 'mdi-draw-pen'"></v-icon>
+                  {{ pendingAiResult.tanda_tangan_terisi ? 'Tanda Tangan Terisi' : 'Tanda Tangan Belum Terdeteksi' }}
+                </v-chip>
+              </div>
+              <v-row dense>
+                <v-col cols="12" sm="6">
+                  <v-text-field
+                    v-model="pendingAiResult.nama_siswa"
+                    label="Nama Siswa (Tulisan Tangan)"
+                    variant="outlined"
+                    density="compact"
+                    placeholder="Contoh: Kanza Aditya"
+                    prepend-inner-icon="mdi-account-edit-outline"
+                    hide-details
+                  ></v-text-field>
+                </v-col>
+                <v-col cols="6" sm="3">
+                  <v-text-field
+                    v-model="pendingAiResult.kelas"
+                    label="Kelas"
+                    variant="outlined"
+                    density="compact"
+                    placeholder="Contoh: 8C"
+                    prepend-inner-icon="mdi-google-classroom"
+                    hide-details
+                  ></v-text-field>
+                </v-col>
+                <v-col cols="6" sm="3">
+                  <v-text-field
+                    v-model="pendingAiResult.no_peserta"
+                    label="No. Peserta"
+                    variant="outlined"
+                    density="compact"
+                    placeholder="Contoh: 01-8C-14"
+                    prepend-inner-icon="mdi-badge-account-outline"
+                    hide-details
+                  ></v-text-field>
+                </v-col>
+                <v-col cols="12" sm="6">
+                  <v-text-field
+                    v-model="pendingAiResult.tanggal_ujian"
+                    label="Tanggal Pelaksanaan Tes"
+                    variant="outlined"
+                    density="compact"
+                    placeholder="Contoh: 23 - September - 2026"
+                    prepend-inner-icon="mdi-calendar-check"
+                    hide-details
+                  ></v-text-field>
+                </v-col>
+                <v-col cols="12" sm="6">
+                  <v-text-field
+                    v-model="pendingAiResult.pernyataan_kejujuran"
+                    label="Pernyataan Kejujuran"
+                    variant="outlined"
+                    density="compact"
+                    placeholder="Saya mengerjakan tes dengan jujur"
+                    prepend-inner-icon="mdi-format-quote-close"
+                    hide-details
+                  ></v-text-field>
+                </v-col>
+              </v-row>
+
+              <v-divider class="my-3"></v-divider>
+
               <div class="text-caption font-weight-bold text-grey-darken-2 mb-2 text-uppercase">
-                Identitas Siswa & Lembar Ujian
+                Identitas Digital (OMR & Validasi Silang)
               </div>
               <v-row dense>
                 <v-col cols="12" sm="6">
                   <v-text-field
                     v-model="pendingAiResult.nisn"
-                    label="NISN (Nomor Induk Siswa)"
+                    label="NISN (10 Digit)"
                     variant="outlined"
                     density="compact"
                     prepend-inner-icon="mdi-card-account-details-outline"
@@ -340,41 +412,30 @@
                 <v-col cols="12" sm="6">
                   <v-text-field
                     v-model="pendingAiResult.npsn"
-                    label="NPSN (Sekolah)"
+                    label="NPSN (8 Digit)"
                     variant="outlined"
                     density="compact"
                     prepend-inner-icon="mdi-school-outline"
                     hide-details
                   ></v-text-field>
                 </v-col>
-                <v-col cols="6" sm="3">
+                <v-col cols="6">
                   <v-text-field
                     v-model="pendingAiResult.id_mapel"
-                    label="ID Mapel"
+                    label="ID Mapel (2 Digit)"
                     variant="outlined"
                     density="compact"
                     prepend-inner-icon="mdi-book-outline"
                     hide-details
                   ></v-text-field>
                 </v-col>
-                <v-col cols="6" sm="3">
+                <v-col cols="6">
                   <v-text-field
                     v-model="pendingAiResult.kode_tes"
-                    label="Kode Tes"
+                    label="Kode Tes (2 Digit)"
                     variant="outlined"
                     density="compact"
                     prepend-inner-icon="mdi-clipboard-check-outline"
-                    hide-details
-                  ></v-text-field>
-                </v-col>
-                <v-col cols="12" sm="6">
-                  <v-text-field
-                    v-model="pendingAiResult.nama_siswa"
-                    label="Nama Siswa (Opsional)"
-                    variant="outlined"
-                    density="compact"
-                    placeholder="Terdeteksi dari tulisan tangan..."
-                    prepend-inner-icon="mdi-account-edit-outline"
                     hide-details
                   ></v-text-field>
                 </v-col>
@@ -396,7 +457,13 @@
                   :key="idx"
                   class="pa-2 rounded border d-flex align-center justify-space-between bg-grey-lighten-5"
                 >
-                  <span class="text-caption font-weight-bold text-grey-darken-3">No. {{ ans.nomor_soal }}</span>
+                  <div class="d-flex align-center gap-1">
+                    <span class="text-caption font-weight-bold text-grey-darken-3">No. {{ ans.nomor_soal }}</span>
+                    <span v-if="ans.bentuk_soal === 'kompleks'" class="text-caption text-indigo font-weight-bold" style="font-size: 10px;">[PGK]</span>
+                    <span v-else-if="ans.bentuk_soal === 'bs3'" class="text-caption text-teal-darken-2 font-weight-bold" style="font-size: 10px;">[BS3]</span>
+                    <span v-else-if="ans.bentuk_soal === 'yt3'" class="text-caption text-cyan-darken-2 font-weight-bold" style="font-size: 10px;">[YT3]</span>
+                    <span v-else-if="ans.bentuk_soal === 'jodoh'" class="text-caption text-amber-darken-3 font-weight-bold" style="font-size: 10px;">[Jdh]</span>
+                  </div>
                   <v-chip
                     size="small"
                     :color="ans.jawaban === '-' || (Array.isArray(ans.jawaban) && ans.jawaban.length === 0) ? 'grey-lighten-2' : 'primary'"

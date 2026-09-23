@@ -126,7 +126,14 @@
         </template>
 
         <template v-slot:item.actions="{ item }">
-          <v-btn icon="mdi-delete" size="small" variant="text" color="error" @click="deleteRecord(item as any)"></v-btn>
+          <v-btn
+            icon="mdi-delete-outline"
+            size="small"
+            variant="text"
+            color="error"
+            title="Hapus baris data"
+            @click.stop="openDialogDeleteSingle(item)"
+          ></v-btn>
         </template>
 
         <template v-slot:no-data>
@@ -159,6 +166,7 @@
 
     
   
+    <!-- Dialog Hapus Spesifik -->
     <v-dialog v-model="dialogDeleteSpecific" max-width="400">
       <v-card class="rounded-xl border" elevation="0">
         <v-card-title class="font-weight-bold pt-4 px-4 bg-grey-lighten-4 border-b">
@@ -173,6 +181,61 @@
           <v-spacer></v-spacer>
           <v-btn variant="text" @click="dialogDeleteSpecific = false">Batal</v-btn>
           <v-btn color="error" variant="flat" rounded="pill" class="px-6" @click="deleteSpecificRecords">Hapus</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Dialog Konfirmasi Hapus Baris Tunggal (Aman untuk iFrame, menggantikan window.confirm) -->
+    <v-dialog v-model="dialogDeleteSingle" max-width="450">
+      <v-card class="rounded-xl border" elevation="4">
+        <v-card-title class="pa-4 bg-red-lighten-5 text-error d-flex align-center font-weight-bold">
+          <v-icon start icon="mdi-delete-alert" class="mr-2"></v-icon>
+          Hapus Data Pemindaian?
+        </v-card-title>
+        <v-card-text class="pa-4">
+          <p class="text-body-2 text-grey-darken-3 mb-3">
+            Apakah Anda yakin ingin menghapus data hasil pemindaian dan penilaian untuk peserta berikut?
+          </p>
+          <div class="bg-grey-lighten-4 pa-3 rounded-lg border text-caption">
+            <div v-if="itemToDelete?.nama_siswa" class="font-weight-bold text-subtitle-2 text-grey-darken-3 mb-1">
+              {{ itemToDelete.nama_siswa }}
+            </div>
+            <div class="d-flex justify-space-between mb-1">
+              <span class="text-grey-darken-1">NISN:</span>
+              <strong class="font-weight-bold text-grey-darken-3">{{ itemToDelete?.nisn || '-' }}</strong>
+            </div>
+            <div class="d-flex justify-space-between mb-1">
+              <span class="text-grey-darken-1">NPSN:</span>
+              <strong class="font-weight-bold text-grey-darken-3">{{ itemToDelete?.npsn || '-' }}</strong>
+            </div>
+            <div class="d-flex justify-space-between mb-1">
+              <span class="text-grey-darken-1">Mapel / Kode Tes:</span>
+              <strong class="font-weight-bold text-grey-darken-3">ID {{ itemToDelete?.id_mapel || '-' }} / {{ itemToDelete?.kode_tes || '-' }}</strong>
+            </div>
+            <div v-if="itemToDelete?.scannedAt" class="d-flex justify-space-between text-grey-darken-1 mt-1 pt-1 border-t">
+              <span>Waktu Pindai:</span>
+              <span>{{ new Date(itemToDelete.scannedAt).toLocaleString('id-ID') }}</span>
+            </div>
+          </div>
+          <p class="text-caption text-error font-weight-medium mt-3 mb-0">
+            * Tindakan ini permanen. Hasil koreksi dan skor untuk lembar ujian ini juga akan ikut dihapus.
+          </p>
+        </v-card-text>
+        <v-card-actions class="pa-4 border-t bg-grey-lighten-5 d-flex justify-end gap-2">
+          <v-btn variant="text" color="grey-darken-1" rounded="pill" @click="dialogDeleteSingle = false">
+            Batal
+          </v-btn>
+          <v-btn
+            color="error"
+            variant="flat"
+            rounded="pill"
+            class="px-5 font-weight-bold"
+            prepend-icon="mdi-delete"
+            :loading="isDeletingSingle"
+            @click="executeDeleteSingle"
+          >
+            Hapus Data
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -194,6 +257,10 @@ const confirmDeleteText = ref('');
 const dialogDeleteSpecific = ref(false);
 const deleteIdMapel = ref('');
 const deleteKodeTes = ref('');
+
+const dialogDeleteSingle = ref(false);
+const itemToDelete = ref<ScanResult | null>(null);
+const isDeletingSingle = ref(false);
 
 const openDialogDeleteSpecific = () => {
   deleteIdMapel.value = '';
@@ -301,26 +368,54 @@ const filteredList = computed(() => {
   );
 });
 
-const deleteRecord = async (res: ScanResult) => {
-  if (confirm(`Yakin ingin menghapus data NISN ${res.nisn}?`)) {
-    try {
-      await db.scanResults.where({
-        npsn: res.npsn,
-        id_mapel: res.id_mapel,
-        kode_tes: res.kode_tes,
-        nisn: res.nisn
-      }).delete();
-      await db.scoreResults.where({
-        npsn: res.npsn,
-        id_mapel: res.id_mapel,
-        kode_tes: res.kode_tes,
-        nisn: res.nisn
-      }).delete();
-      omrStore.showToast('Data berhasil dihapus', 'success');
-      loadHistory();
-    } catch (e: any) {
-      omrStore.showToast('Gagal menghapus data: ' + e.message, 'error');
-    }
+const openDialogDeleteSingle = (item: any) => {
+  const target: ScanResult = (item && item.raw) ? item.raw : item;
+  if (!target) return;
+  itemToDelete.value = target;
+  dialogDeleteSingle.value = true;
+};
+
+const executeDeleteSingle = async () => {
+  if (!itemToDelete.value) return;
+  isDeletingSingle.value = true;
+  const target = itemToDelete.value;
+  try {
+    const npsn = String(target.npsn ?? '').trim();
+    const idMapel = String(target.id_mapel ?? '').trim();
+    const kodeTes = String(target.kode_tes ?? '').trim();
+    const nisn = String(target.nisn ?? '').trim();
+
+    // 1. Hapus menggunakan Compound Primary Key Dexie: [npsn+id_mapel+kode_tes+nisn]
+    await db.scanResults.delete([npsn, idMapel, kodeTes, nisn]);
+    await db.scoreResults.delete([npsn, idMapel, kodeTes, nisn]);
+
+    // 2. Filter fallback jika ada ketidaksesuaian spasi atau tipe data asli
+    await db.scanResults
+      .filter(r => 
+        String(r.npsn).trim() === npsn &&
+        String(r.id_mapel).trim() === idMapel &&
+        String(r.kode_tes).trim() === kodeTes &&
+        String(r.nisn).trim() === nisn
+      )
+      .delete();
+
+    await db.scoreResults
+      .filter(r => 
+        String(r.npsn).trim() === npsn &&
+        String(r.id_mapel).trim() === idMapel &&
+        String(r.kode_tes).trim() === kodeTes &&
+        String(r.nisn).trim() === nisn
+      )
+      .delete();
+
+    omrStore.showToast(`Data peserta NISN ${nisn} berhasil dihapus`, 'success');
+    dialogDeleteSingle.value = false;
+    itemToDelete.value = null;
+    await loadHistory();
+  } catch (e: any) {
+    omrStore.showToast('Gagal menghapus data: ' + e.message, 'error');
+  } finally {
+    isDeletingSingle.value = false;
   }
 };
 
