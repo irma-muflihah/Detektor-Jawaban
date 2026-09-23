@@ -133,8 +133,9 @@ Petunjuk Khusus Ekstraksi Presisi:
   const fallbackCandidates: string[] = [
     activeModel,
     'gemini-3.8-flash',
+    'gemini-3.1-pro-preview',
     'gemini-3.1-flash-lite',
-    'gemini-3.6-flash',
+    'gemini-flash-latest',
   ].filter((v, i, a) => a.indexOf(v) === i);
 
   let responseText: string | undefined;

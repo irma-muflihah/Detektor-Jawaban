@@ -135,8 +135,9 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 // Rantai fallback model multimodal generasi baru yang unik dan aktif
 const CANDIDATE_MODELS: string[] = [
   'gemini-3.8-flash',
+  'gemini-3.1-pro-preview',
   'gemini-3.1-flash-lite',
-  'gemini-3.6-flash',
+  'gemini-flash-latest'
 ];
 
 export async function handleOmrScan(req: Request | any, res: Response | any) {

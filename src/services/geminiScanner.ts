@@ -27,6 +27,41 @@ export interface GeminiOmrScanResponse {
   error?: string;
 }
 
+/**
+ * Mengompres dan membatasi dimensi gambar agar transfer payload cepat dan terhindar dari 503 Gateway Timeouts.
+ */
+async function optimizeImageForAi(dataUrl: string, maxDimension = 1600): Promise<string> {
+  if (!dataUrl || !dataUrl.startsWith('data:image')) return dataUrl;
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+      if (width <= maxDimension && height <= maxDimension && dataUrl.length < 800_000) {
+        return resolve(dataUrl);
+      }
+      if (width > maxDimension || height > maxDimension) {
+        if (width > height) {
+          height = Math.round((height * maxDimension) / width);
+          width = maxDimension;
+        } else {
+          width = Math.round((width * maxDimension) / height);
+          height = maxDimension;
+        }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return resolve(dataUrl);
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', 0.90));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
 export async function scanWithGemini(
   imageDataUrl: string,
   template?: OmrTemplate,
@@ -34,6 +69,7 @@ export async function scanWithGemini(
 ): Promise<GeminiOmrScanResponse> {
   const customApiKey = getStoredApiKey();
   const selectedModel = (overrideModel || getStoredModel()).trim();
+  const optimizedDataUrl = await optimizeImageForAi(imageDataUrl);
 
   // 1. Coba terlebih dahulu melalui Proxy Backend (/api/gemini/omr-scan)
   let proxyFailed = false;
@@ -54,7 +90,7 @@ export async function scanWithGemini(
       method: 'POST',
       headers,
       body: JSON.stringify({
-        image: imageDataUrl,
+        image: optimizedDataUrl,
         apiKey: customApiKey || undefined,
         model: selectedModel || undefined,
         template: template ? {
