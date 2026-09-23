@@ -255,9 +255,26 @@
                     <v-icon size="48" :color="isDragging ? 'primary' : 'grey'" class="mb-2">mdi-cloud-upload</v-icon>
                     <h3 class="text-subtitle-1 font-weight-bold text-grey-darken-2 mb-1">Tarik & Lepas File LJK</h3>
                     <p class="text-caption text-grey-darken-1 mb-4">Mendukung format JPG, PNG, WEBP (bisa pilih sekaligus)</p>
-                    <v-btn color="primary" variant="tonal" rounded="pill" @click="triggerFileInput" prepend-icon="mdi-image-plus">
-                      Pilih File LJK
-                    </v-btn>
+                    <div class="d-flex align-center justify-center flex-wrap gap-3">
+                      <v-btn color="primary" variant="tonal" rounded="pill" @click="triggerFileInput" prepend-icon="mdi-folder-upload">
+                        Pilih File Lokal
+                      </v-btn>
+                      <GoogleDrivePickerBtn
+                        label="Pilih dari Google Drive (Picker)"
+                        color="secondary"
+                        variant="flat"
+                        size="default"
+                        @files-selected="onDriveFilesSelected"
+                        @error="onDriveError"
+                      />
+                    </div>
+
+                    <div class="mt-4 pa-3 rounded-lg bg-grey-lighten-4 border d-flex align-center gap-2" style="max-width: 540px;">
+                      <v-icon color="primary" size="20">mdi-google-drive</v-icon>
+                      <span class="text-caption text-grey-darken-2">
+                        <strong>Google Drive:</strong> Anda dapat memilih beberapa citra LJK sekaligus atau langsung memilih sebuah folder Google Drive untuk memindai seluruh isinya.
+                      </span>
+                    </div>
                   </div>
 
                   <div class="bg-white rounded-xl border pa-4 d-flex align-center justify-space-between flex-shrink-0">
@@ -580,6 +597,8 @@ import {
 } from '../utils/imageOrientationService';
 import { extractOmrWithRelativeScoring, refineFiducialRegistration } from '../utils/omrExtractionService';
 import GeminiSettingsDialog from '../components/GeminiSettingsDialog.vue';
+import GoogleDrivePickerBtn from '../components/GoogleDrivePickerBtn.vue';
+import type { PickedDriveFile } from '../services/googleDrivePickerService';
 
 const omrStore = useOmrStore();
 
@@ -1217,6 +1236,19 @@ const addFilesToQueue = (files: File[]) => {
   imageFiles.forEach(file => {
     batchFiles.value.push({ file });
   });
+};
+
+const onDriveFilesSelected = (picked: PickedDriveFile[]) => {
+  if (!picked || picked.length === 0) return;
+  const newBatchItems: BatchFile[] = picked.map(p => ({
+    file: p.file
+  }));
+  batchFiles.value.push(...newBatchItems);
+  omrStore.showToast(`Berhasil menambahkan ${picked.length} berkas citra LJK dari Google Drive.`, 'success');
+};
+
+const onDriveError = (errMsg: string) => {
+  omrStore.showToast(errMsg, 'error');
 };
 
 const fileToDataUrl = (file: File): Promise<string> => {
