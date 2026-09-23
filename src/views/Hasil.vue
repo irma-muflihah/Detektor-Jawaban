@@ -133,11 +133,19 @@
         <template v-slot:item.actions="{ item }">
           <div class="d-flex align-center">
             <v-btn
-              icon="mdi-eye-outline"
+              icon="mdi-crosshairs-gps"
               size="small"
               variant="text"
               color="primary"
-              title="Lihat detail & kalibrasi"
+              title="Buka di Laman Kalibrasi & Bounding"
+              @click.stop="openInKalibrasi(item)"
+            ></v-btn>
+            <v-btn
+              icon="mdi-eye-outline"
+              size="small"
+              variant="text"
+              color="grey-darken-2"
+              title="Lihat detail ringkas"
               @click.stop="openDetailDialog(item)"
             ></v-btn>
             <v-btn
@@ -321,21 +329,32 @@
         </v-card-text>
 
         <v-card-actions class="pa-4 bg-grey-lighten-4 border-t d-flex justify-space-between align-center flex-wrap gap-2">
-          <v-btn
-            v-if="selectedDetailItem.image_url && !selectedDetailItem.is_calibrated"
-            color="amber-darken-3"
-            variant="flat"
-            rounded="pill"
-            class="font-weight-bold text-white px-4"
-            prepend-icon="mdi-star-check"
-            :loading="isPromotingCalibration"
-            @click="promoteToCalibration(selectedDetailItem)"
-          >
-            Jadikan Koleksi Kalibrasi Sempurna
-          </v-btn>
-          <div v-else></div>
+          <div class="d-flex align-center gap-2 flex-wrap">
+            <v-btn
+              color="primary"
+              variant="tonal"
+              rounded="pill"
+              class="font-weight-bold px-4"
+              prepend-icon="mdi-crosshairs-gps"
+              @click="openInKalibrasi(selectedDetailItem)"
+            >
+              Analisis di Laman Kalibrasi
+            </v-btn>
+            <v-btn
+              v-if="selectedDetailItem.image_url && !selectedDetailItem.is_calibrated"
+              color="amber-darken-3"
+              variant="flat"
+              rounded="pill"
+              class="font-weight-bold text-white px-4"
+              prepend-icon="mdi-star-check"
+              :loading="isPromotingCalibration"
+              @click="promoteToCalibration(selectedDetailItem)"
+            >
+              Jadikan Koleksi Kalibrasi Sempurna
+            </v-btn>
+          </div>
 
-          <v-btn color="primary" variant="flat" rounded="pill" class="px-6 font-weight-bold" @click="dialogDetail = false">
+          <v-btn color="grey-darken-1" variant="text" rounded="pill" class="px-6 font-weight-bold" @click="dialogDetail = false">
             Tutup
           </v-btn>
         </v-card-actions>
@@ -347,10 +366,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { db, type ScanResult } from '../db/database';
 import { useOmrStore } from '../store/omrStore';
 import { calibrateVectorRoisFromScan, recordCalibrationSample } from '../utils/roiVectorService';
 
+const router = useRouter();
 const omrStore = useOmrStore();
 const scanHistoryList = ref<ScanResult[]>([]);
 const search = ref('');
@@ -368,6 +389,20 @@ const isDeletingSingle = ref(false);
 const dialogDetail = ref(false);
 const selectedDetailItem = ref<ScanResult | null>(null);
 const isPromotingCalibration = ref(false);
+
+const openInKalibrasi = (item: ScanResult | null) => {
+  if (!item) return;
+  dialogDetail.value = false;
+  router.push({
+    path: '/kalibrasi',
+    query: {
+      npsn: item.npsn,
+      id_mapel: item.id_mapel,
+      kode_tes: item.kode_tes,
+      nisn: item.nisn
+    }
+  });
+};
 
 const openDetailDialog = (item: ScanResult) => {
   selectedDetailItem.value = item;

@@ -137,9 +137,8 @@
                   </v-btn>
 
                   <v-switch
-                    v-if="scanEngine === 'gemini'"
                     v-model="previewBeforeSave"
-                    label="Tinjau Hasil AI"
+                    label="Tinjau & Validasi Hasil"
                     color="primary"
                     density="compact"
                     hide-details
@@ -165,7 +164,19 @@
                     </span>
                   </div>
 
-                  <div class="d-flex align-center gap-1">
+                  <div class="d-flex align-center gap-2 flex-wrap">
+                    <v-btn
+                      size="small"
+                      color="primary"
+                      variant="tonal"
+                      rounded="pill"
+                      prepend-icon="mdi-crosshairs-gps"
+                      class="text-none font-weight-bold"
+                      to="/kalibrasi"
+                    >
+                      Buka Laman Kalibrasi & Bounding
+                    </v-btn>
+
                     <v-btn
                       size="small"
                       color="secondary"
@@ -565,7 +576,17 @@
           <v-btn variant="text" color="grey-darken-1" rounded="pill" @click="cancelAiResult" prepend-icon="mdi-close">
             Batal / Pindai Ulang
           </v-btn>
-          <div class="d-flex gap-2">
+          <div class="d-flex align-center gap-2 flex-wrap">
+            <v-btn
+              color="secondary"
+              variant="tonal"
+              rounded="pill"
+              class="font-weight-bold"
+              prepend-icon="mdi-crosshairs-gps"
+              @click="openInKalibrasiPage"
+            >
+              Analisis Bounding di Laman Kalibrasi
+            </v-btn>
             <v-btn
               color="primary"
               variant="tonal"
@@ -606,6 +627,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { useOmrStore } from '../store/omrStore';
 import { db, type ScanResult, type NormalizedBubbleROI } from '../db/database';
 import { scanWithGemini, checkGeminiHealth, type GeminiOmrResultData } from '../services/geminiScanner';
@@ -625,6 +647,7 @@ import { extractOmrWithRelativeScoring, refineFiducialRegistration } from '../ut
 import GeminiSettingsDialog from '../components/GeminiSettingsDialog.vue';
 import CalibrationCollectionDialog from '../components/CalibrationCollectionDialog.vue';
 
+const router = useRouter();
 const omrStore = useOmrStore();
 
 const step = ref(1);
@@ -635,7 +658,7 @@ const cvReady = ref(false);
 
 const isScanning = ref(false);
 const scanStatusMessage = ref('Memproses...');
-const scanEngine = ref<'gemini' | 'opencv'>('gemini');
+const scanEngine = ref<'gemini' | 'opencv'>('opencv');
 const previewBeforeSave = ref(true);
 const showAiPreviewDialog = ref(false);
 const showApiKeyDialog = ref(false);
@@ -1191,12 +1214,18 @@ const captureAndScan = async () => {
       }
     } else {
       const result = await processOMRImage(videoElement.value);
-      await saveScanResult({
-        ...result,
-        engine: 'opencv'
-      });
-      addSessionLog('success', `NISN: ${result.nisn}`, 'Berhasil disimpan (OpenCV + Vektor ROI)', 'opencv');
-      omrStore.showToast(`Berhasil dipindai! (NISN: ${result.nisn})`, 'success');
+      if (previewBeforeSave.value) {
+        pendingAiResult.value = result;
+        markAsPerfectCalibration.value = false;
+        showAiPreviewDialog.value = true;
+      } else {
+        await saveScanResult({
+          ...result,
+          engine: 'opencv'
+        });
+        addSessionLog('success', `NISN: ${result.nisn}`, 'Berhasil disimpan (OpenCV + Vektor ROI)', 'opencv');
+        omrStore.showToast(`Berhasil dipindai! (NISN: ${result.nisn})`, 'success');
+      }
     }
   } catch (e: any) {
     addSessionLog('error', 'Tangkapan Kamera', e.message, scanEngine.value);
@@ -1210,10 +1239,11 @@ const confirmAndSaveAiResult = async (forceCalibrate?: boolean) => {
   if (!pendingAiResult.value) return;
   const isPerfect = forceCalibrate !== undefined ? forceCalibrate : markAsPerfectCalibration.value;
   try {
+    const activeEng = pendingAiResult.value.engine || scanEngine.value;
     await saveScanResult({
       ...pendingAiResult.value,
       is_calibrated: isPerfect,
-      engine: 'gemini'
+      engine: activeEng
     });
 
     if (isPerfect && pendingImageUrl.value) {
@@ -1225,8 +1255,8 @@ const confirmAndSaveAiResult = async (forceCalibrate?: boolean) => {
     addSessionLog(
       'success',
       `NISN: ${pendingAiResult.value.nisn || '-'}`,
-      `Berhasil disimpan (Gemini AI)${isPerfect ? ' [Sampel Kalibrasi Sempurna]' : ''}`,
-      'gemini'
+      `Berhasil disimpan (${activeEng.toUpperCase()})${isPerfect ? ' [Sampel Kalibrasi Sempurna]' : ''}`,
+      activeEng as 'gemini' | 'opencv'
     );
     showAiPreviewDialog.value = false;
     pendingAiResult.value = null;
@@ -1234,6 +1264,33 @@ const confirmAndSaveAiResult = async (forceCalibrate?: boolean) => {
     markAsPerfectCalibration.value = false;
   } catch (err: any) {
     omrStore.showToast(`Gagal menyimpan: ${err.message}`, 'error');
+  }
+};
+
+const openInKalibrasiPage = async () => {
+  if (!pendingAiResult.value) return;
+  try {
+    const activeEng = pendingAiResult.value.engine || scanEngine.value;
+    const itemToSave = {
+      ...pendingAiResult.value,
+      engine: activeEng
+    };
+    await saveScanResult(itemToSave);
+    showAiPreviewDialog.value = false;
+    stopCamera();
+    
+    // Redirect to Kalibrasi page with params
+    router.push({
+      path: '/kalibrasi',
+      query: {
+        npsn: itemToSave.npsn,
+        id_mapel: itemToSave.id_mapel,
+        kode_tes: itemToSave.kode_tes,
+        nisn: itemToSave.nisn
+      }
+    });
+  } catch (err: any) {
+    omrStore.showToast(`Gagal membuka kalibrasi: ${err.message}`, 'error');
   }
 };
 

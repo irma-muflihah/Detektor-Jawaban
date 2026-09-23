@@ -27,6 +27,11 @@ const router = createRouter({
       component: Pindai
     },
     {
+      path: '/kalibrasi',
+      name: 'Kalibrasi',
+      component: () => import('../views/Kalibrasi.vue')
+    },
+    {
       path: '/results',
       name: 'Hasil',
       component: () => import('../views/Hasil.vue')

@@ -19,6 +19,7 @@
         <v-list-item prepend-icon="mdi-draw-pen" title="Desain" to="/designer" rounded="lg" class="mb-1"></v-list-item>
         <v-list-item prepend-icon="mdi-printer-3d" title="Simulasi" to="/simulator" rounded="lg" class="mb-1"></v-list-item>
         <v-list-item prepend-icon="mdi-text-recognition" title="Pindai" to="/scanner" rounded="lg" class="mb-1"></v-list-item>
+        <v-list-item prepend-icon="mdi-crosshairs-gps" title="Kalibrasi" to="/kalibrasi" rounded="lg" class="mb-1"></v-list-item>
         <v-list-item prepend-icon="mdi-database-eye" title="Hasil" to="/results" rounded="lg" class="mb-1"></v-list-item>
         <v-list-item prepend-icon="mdi-file-percent" title="Nilai" to="/nilai" rounded="lg" class="mb-1"></v-list-item>
         <v-list-item prepend-icon="mdi-chart-box-outline" title="Analisis" to="/analisis" rounded="lg" class="mb-1"></v-list-item>
