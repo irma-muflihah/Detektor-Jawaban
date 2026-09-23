@@ -165,7 +165,7 @@
           <v-select
             v-model="kunciId"
             :items="scanHistoryList"
-            :item-title="(item: any) => `${item.nisn}${item.nama_siswa ? ' - ' + item.nama_siswa : ''}${item.is_ground_truth ? ' ⭐ [Ground Truth]' : ''}`"
+            :item-title="(item: any) => `${item.nisn}${item.nama_siswa ? ' - ' + item.nama_siswa : ''}`"
             :item-value="(item: any) => getUniqueId(item)"
             label="Pilih Kunci Jawaban (NISN)"
             variant="outlined"
@@ -175,11 +175,8 @@
               <v-list-item
                 v-bind="props"
                 :title="`${item.raw.nisn}${item.raw.nama_siswa ? ' - ' + item.raw.nama_siswa : ''}`"
-                :subtitle="`Mapel: ${item.raw.id_mapel} | Tes: ${item.raw.kode_tes}${item.raw.is_ground_truth ? ' • Acuan Ground Truth' : ''}`"
+                :subtitle="`Mapel: ${item.raw.id_mapel} | Tes: ${item.raw.kode_tes}`"
               >
-                <template v-slot:append v-if="item.raw.is_ground_truth">
-                  <v-chip color="amber-darken-3" size="x-small" variant="flat">Ground Truth</v-chip>
-                </template>
               </v-list-item>
             </template>
           </v-select>
@@ -255,7 +252,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { db, type ScanResult, type ScoreResult, seedGroundTruthIfMissing } from '../db/database';
+import { db, type ScanResult, type ScoreResult } from '../db/database';
 
 import { useOmrStore } from '../store/omrStore';
 const omrStore = useOmrStore();
@@ -534,7 +531,6 @@ const getScoreClass = (res: any, n: number) => {
 };
 
 onMounted(async () => {
-  await seedGroundTruthIfMissing();
   await loadHistory();
 });
 

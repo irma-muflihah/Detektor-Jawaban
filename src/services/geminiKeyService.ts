@@ -57,7 +57,10 @@ const currentApiKey = ref<string>(localStorage.getItem(API_KEY_STORAGE_KEY) || '
 const currentModel = ref<string>(getStoredModel());
 
 export function getStoredApiKey(): string {
-  return (localStorage.getItem(API_KEY_STORAGE_KEY) || '').trim();
+  const local = (localStorage.getItem(API_KEY_STORAGE_KEY) || '').trim();
+  if (local) return local;
+  const envKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || (window as any)?.__GEMINI_API_KEY__ || '';
+  return String(envKey).trim();
 }
 
 export function setStoredApiKey(key: string): void {

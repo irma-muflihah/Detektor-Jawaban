@@ -58,70 +58,34 @@ ${JSON.stringify(
   }
 
   const promptText = `Anda adalah asisten AI spesialis Optical Mark Recognition (OMR) dan Optical Character Recognition (OCR) presisi tinggi untuk Lembar Jawab Komputer (LJK) Indonesia.
-Tugas Anda: Pindai gambar LJK terlampir dan ekstrak seluruh data peserta (tulisan tangan), identitas digital (kotak angka dan bulatan hitam), serta jawaban soal yang dihitamkan dengan sangat akurat.
+Tugas Anda: Pindai gambar LJK terlampir dan ekstrak seluruh data peserta (tulisan tangan), identitas digital (kotak angka dan bulatan hitam), serta jawaban soal yang dihitamkan dengan sangat akurat dan objektif sesuai citra aktual.
 
 ${templateContext}
 
-============================================================
-ACUAN GROUND TRUTH STANDAR EMAS (FEW-SHOT GROUND TRUTH BENCHMARK)
-Gunakan acuan ground truth terverifikasi 100% berikut untuk memahami tata letak, format pengisian, dan konvensi jawaban pada formulir standar "Lembar Jawaban Latihan TKA 1":
-Contoh LJK Terverifikasi:
-- Data Peserta (Tulisan Tangan):
-  * nama_siswa: "FELLYSA NINDA MAHARANI"
-  * kelas: "9A"
-  * no_peserta: "R09-9A-11"
-  * tanggal_ujian: "23-09-2026"
-- Identitas Digital (Cross-Validation Kotak & Bulatan Kolom):
-  * NISN: "0114741902" (10 kolom: 0, 1, 1, 4, 7, 4, 1, 9, 0, 2)
-  * NPSN: "20301942" (8 kolom: 2, 0, 3, 0, 1, 9, 4, 2)
-  * ID Mapel: "01" (2 kolom: 0, 1)
-  * Kode Tes: "91" (2 kolom: 9, 1)
-- Kunci Jawaban Pemindaian Resmi:
-  * No 1 - 12 (Pilihan Ganda Biasa 'pg'):
-    1: ["D"], 2: ["D"], 3: ["A"], 4: ["D"], 5: ["D"], 6: ["C"],
-    7: ["C"], 8: ["D"], 9: ["D"], 10: ["B"], 11: ["C"], 12: ["C"]
-  * No 13 - 18 (Benar / Salah 3 Baris 'bs3'):
-    13: ["B", "S", "S"]
-    14: ["S", "S", "S"]
-    15: ["B", "S", "B"]
-    16: ["B", "B", "B"]
-    17: ["B", "B", "S"]
-    18: ["B", "S", "S"]
-  * No 19 - 24 (Pilihan Ganda Kompleks 'kompleks', Multi-Selection Kotak Persegi):
-    19: ["B", "C", "D"]
-    20: ["B", "D"]
-    21: ["C", "D"]
-    22: ["B", "C", "D"]
-    23: ["A", "C", "D"]
-    24: ["A", "C", "D"]
-  * No 25 - 30 (Menjodohkan 'jodoh'):
-    25: ["A"], 26: ["D"], 27: ["B"], 28: ["B"], 29: ["C"], 30: ["C"]
-============================================================
-
 Petunjuk Khusus Ekstraksi Presisi:
 0. Orientasi & Arah Baca LJK:
-   - Jika lembar LJK tampak mendatar (landscape), miring, atau terbalik 180°, kenali dan orientasikan secara mental posisi lembar ke kondisi potret tegak lurus (di mana judul 'Lembar Jawaban Latihan TKA 1' serta isian Identitas Siswa berada di sisi ATAS, dan jawaban soal berada di bawahnya).
+   - Jika lembar LJK tampak mendatar (landscape), miring, atau terbalik 180°, kenali dan orientasikan posisi lembar ke kondisi potret tegak lurus (di mana judul/identitas siswa berada di sisi ATAS, dan jawaban soal berada di bawahnya).
 
 1. Data Peserta Esensial (OCR Tulisan Tangan pada Blok Data Peserta di bagian atas):
-   - nama_siswa: Nama lengkap siswa dari kotak tulisan tangan "Nama Lengkap" (contoh: "FELLYSA NINDA MAHARANI").
-   - kelas: Kelas siswa dari kotak isian "Kelas" (contoh: "9A").
-   - no_peserta: Nomor peserta dari kotak isian "No. Peserta" (contoh: "R09-9A-11").
-   - tanggal_ujian: Tanggal pelaksanaan dari kotak isian "Tanggal Pelaksanaan Tes" (contoh: "23-09-2026").
-   (Catatan penting: Blok catatan/keterangan, teks pernyataan kejujuran, dan tanda tangan/paraf diabaikan saja).
+   - nama_siswa: Nama lengkap siswa dari kotak tulisan tangan "Nama Lengkap" atau "Nama Siswa".
+   - kelas: Kelas siswa dari kotak isian "Kelas".
+   - no_peserta: Nomor peserta dari kotak isian "No. Peserta".
+   - tanggal_ujian: Tanggal pelaksanaan dari kotak isian tanggal tes.
+   (Catatan: Teks pernyataan kejujuran dan tanda tangan/paraf diabaikan).
 
 2. Blok Identitas Digital (Cross-Validation Antara Kotak Angka Atas dan Bulatan 0-9 di Bawahnya):
-   - NISN (10 digit): Periksa angka yang tertulis di dalam kotak 1-10 DAN bulatan angka 0-9 yang dihitamkan di kolom bawahnya. Lakukan verifikasi silang (cross-validation) agar 10 digit angka yang dihasilkan tepat 100%.
-   - NPSN (8 digit): Periksa angka di kotak 1-8 dan bulatan 0-9 di bawahnya (standar: 20301942).
-   - ID Mapel (2 digit): Periksa angka di kotak dan bulatan di bawahnya (contoh: 01).
-   - Kode Tes (2 digit): Periksa angka di kotak dan bulatan di bawahnya (contoh: 91).
+   - NISN: Periksa angka yang tertulis di dalam kotak DAN bulatan angka 0-9 yang dihitamkan di kolom bawahnya secara silang untuk akurasi 100%.
+   - NPSN: Periksa angka di kotak dan bulatan 0-9 di bawahnya.
+   - ID Mapel: Periksa angka di kotak dan bulatan di bawahnya.
+   - Kode Tes: Periksa angka di kotak dan bulatan di bawahnya.
 
-3. Aturan Krusial Jawaban Soal (OMR):
-   - Periksa setiap butir nomor soal.
-   - Deteksi bulatan atau kotak yang dihitamkan (pensil 2B, pulpen hitam/biru, arsiran tebal). Abaikan bulatan/kotak yang kosong atau hanya coretan tipis/bekas hapusan.
-   - Untuk tipe 'pg' (Pilihan Ganda Biasa No 1-12): Masukkan 1 opsi yang dipilih, misal ["A"] atau ["B"] atau ["C"] atau ["D"]. Jika kosong, kembalikan [].
-   - Untuk tipe 'kompleks' (Pilihan Ganda Kompleks No 19-24): Bentuk targetnya adalah KOTAK CENTANG (persegi/checkbox). Soal ini DAPAT MEMILIKI LEBIH DARI SATU JAWABAN (multi-selection). Periksa seluruh opsi A, B, C, D dan masukkan SEMUA opsi kotak yang dihitamkan dalam array, misalnya ["B", "C", "D"], ["B", "D"], ["A", "C", "D"]. JANGAN dibatasi hanya satu jawaban!
-   - Untuk tipe 'bs3' (Benar / Salah 3 Baris No 13-18): Setiap nomor soal memiliki 3 baris sub-pernyataan yang tersusun vertikal dari atas ke bawah. Masukkan array persis 3 string untuk baris 1, 2, dan 3, misalnya ["B", "S", "S"] atau ["B", "B", "B"].
-   - Untuk tipe 'jodoh' (Menjodohkan No 25-30): Masukkan opsi huruf yang dihitamkan, misal ["A"] atau ["D"].
+3. Aturan Jawaban Soal (OMR):
+   - Periksa setiap butir nomor soal yang ada pada lembar LJK.
+   - Deteksi bulatan atau kotak yang dihitamkan secara tebal (pensil/pulpen). Abaikan bulatan/kotak yang kosong atau bekas hapusan tipis.
+   - Untuk tipe 'pg' (Pilihan Ganda Biasa): Masukkan 1 opsi huruf yang dipilih, misal ["A"] atau ["B"] atau ["C"] atau ["D"]. Jika kosong, kembalikan [].
+   - Untuk tipe 'kompleks' (Pilihan Ganda Kompleks): Berbentuk kotak centang/persegi. Dapat memiliki lebih dari satu pilihan jawaban. Masukkan SEMUA opsi kotak yang dihitamkan dalam array, misalnya ["B", "C", "D"], ["B", "D"], ["A", "C", "D"].
+   - Untuk tipe 'bs3' (Benar / Salah 3 Baris): Memiliki 3 baris sub-pernyataan dari atas ke bawah. Masukkan array persis 3 string untuk baris 1, 2, dan 3, misalnya ["B", "S", "S"] atau ["B", "B", "B"].
+   - Untuk tipe 'jodoh' (Menjodohkan): Masukkan opsi huruf yang dihitamkan, misal ["A"] atau ["D"].
    - Jika butir soal tidak dijawab sama sekali, kembalikan array kosong [].
 
 4. Evaluasi Kualitas & Keyakinan:

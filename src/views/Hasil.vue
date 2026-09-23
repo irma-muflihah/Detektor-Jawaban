@@ -18,9 +18,6 @@
             <v-list-item prepend-icon="mdi-code-json" @click="exportJSON" :disabled="scanHistoryList.length === 0">
               <v-list-item-title>Ekspor JSON</v-list-item-title>
             </v-list-item>
-            <v-list-item prepend-icon="mdi-check-decagram" class="text-amber-darken-3" @click="restoreGroundTruth">
-              <v-list-item-title class="font-weight-medium">Muat Ground Truth Acuan</v-list-item-title>
-            </v-list-item>
             <v-divider class="my-1"></v-divider>
             <v-list-item prepend-icon="mdi-delete-sweep" class="text-error" @click="openDialogDeleteSpecific" :disabled="scanHistoryList.length === 0">
               <v-list-item-title>Hapus Data Spesifik</v-list-item-title>
@@ -107,17 +104,6 @@
             >
               <v-icon start size="12" v-if="item.engine === 'gemini'">mdi-creation</v-icon>
               {{ item.engine === 'gemini' ? 'Gemini AI' : 'OpenCV' }}
-            </v-chip>
-            <v-chip
-              v-if="item.is_ground_truth"
-              size="x-small"
-              color="amber-darken-3"
-              class="font-weight-bold text-white"
-              variant="flat"
-              title="Ground Truth Resmi Terverifikasi (Gemini Pro 3.1)"
-            >
-              <v-icon start size="12">mdi-check-decagram</v-icon>
-              Ground Truth
             </v-chip>
           </div>
         </template>
@@ -261,7 +247,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import { db, type ScanResult, seedGroundTruthIfMissing } from '../db/database';
+import { db, type ScanResult } from '../db/database';
 import { useOmrStore } from '../store/omrStore';
 
 const omrStore = useOmrStore();
@@ -364,15 +350,8 @@ const getAnswerFor = (res: any, n: number) => {
 };
 
 onMounted(async () => {
-  await seedGroundTruthIfMissing();
   await loadHistory();
 });
-
-const restoreGroundTruth = async () => {
-  await seedGroundTruthIfMissing(true);
-  omrStore.showToast('Ground Truth standar acuan berhasil dimuat ulang ke database.', 'success');
-  await loadHistory();
-};
 
 const formatAnswer = (val: any) => {
   if (Array.isArray(val)) return val.length > 0 ? val.join(',') : '-';
