@@ -58,7 +58,6 @@ export function extractVectorRoisFromTemplate(
           normHeight: 28 / canvasHeight
         }
       );
-      // Pernyataan kejujuran, catatan, dan tanda tangan sengaja diabaikan sesuai spesifikasi
       return;
     }
 
@@ -121,13 +120,25 @@ export async function saveBaselineRoi(template: OmrTemplate): Promise<TemplateRo
   return baselineRecord;
 }
 
+export interface CalibrationMetadata {
+  modelName?: string;
+  imageWidth?: number;
+  imageHeight?: number;
+  notes?: string;
+  isUserVerified?: boolean;
+  studentName?: string;
+  nisn?: string;
+  calibratedBubbleCount?: number;
+}
+
 /**
- * Menambahkan sampel kalibrasi baru hasil pemindaian sukses dari Gemini AI
+ * Menambahkan sampel kalibrasi baru yang HANYA dipanggil ketika pengguna
+ * mengonfirmasi bahwa hasil pemindaian adalah SEMPURNA.
  */
 export async function recordCalibrationSample(
   templateId: string,
   calibratedVectorRois: NormalizedBubbleROI[],
-  metadata?: { modelName?: string; imageWidth?: number; imageHeight?: number; notes?: string }
+  metadata?: CalibrationMetadata
 ): Promise<TemplateRoiRecord> {
   const sampleId = `${templateId}_sample_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   
@@ -141,21 +152,33 @@ export async function recordCalibrationSample(
     vectorRois: calibratedVectorRois,
     handwrittenFields: baseline?.handwrittenFields,
     sampleCount: 1,
-    confidence: 0.95,
-    metadata,
+    confidence: 0.98,
+    metadata: {
+      ...metadata,
+      isUserVerified: true,
+      verifiedAt: Date.now()
+    },
     createdAt: Date.now()
   };
 
   await db.templateRois.put(sampleRecord);
 
-  // Hitung ulang ROI Resultan gabungan
+  // Hitung ulang ROI Resultan gabungan dari baseline dan sampel-sampel yang diverifikasi sempurna
   await computeResultantRoi(templateId);
 
   return sampleRecord;
 }
 
 /**
- * Menghitung nilai median centroid (resultan vektor) dari baseline dan seluruh sampel AI
+ * Menghapus satu sampel kalibrasi spesifik dari database dan menghitung ulang resultan
+ */
+export async function deleteCalibrationSample(templateId: string, sampleId: string): Promise<void> {
+  await db.templateRois.delete(sampleId);
+  await computeResultantRoi(templateId);
+}
+
+/**
+ * Menghitung nilai median centroid (resultan vektor) dari baseline dan seluruh sampel sempurna
  */
 export async function computeResultantRoi(templateId: string): Promise<TemplateRoiRecord | null> {
   const baseline = await db.templateRois.get(`${templateId}_baseline`);
@@ -222,9 +245,10 @@ export async function computeResultantRoi(templateId: string): Promise<TemplateR
     vectorRois: resultantVectorRois,
     handwrittenFields: baseline?.handwrittenFields,
     sampleCount: samples.length + (baseline ? 1 : 0),
-    confidence: Math.min(1.0, 0.85 + samples.length * 0.03),
+    confidence: Math.min(1.0, 0.90 + samples.length * 0.02),
     metadata: {
-      notes: `Resultan dihitung dari ${samples.length} sampel AI kalibrasi + baseline`
+      notes: `Resultan dihitung dari ${samples.length} sampel kalibrasi sempurna pengguna + baseline`,
+      sampleCount: samples.length
     },
     createdAt: Date.now()
   };
@@ -260,7 +284,7 @@ export async function getTemplateRoisForScanning(templateId: string): Promise<{
 }
 
 /**
- * Mereset data kalibrasi AI templat dan mengembalikan ke baseline murni
+ * Mereset data kalibrasi templat dan mengembalikan ke baseline murni
  */
 export async function resetTemplateCalibration(templateId: string): Promise<void> {
   const records = await db.templateRois
@@ -282,7 +306,7 @@ export async function resetTemplateCalibration(templateId: string): Promise<void
       type: 'resultant',
       sampleCount: 1,
       metadata: {
-        notes: 'Resultant direset ke baseline'
+        notes: 'Resultant direset ke baseline murni'
       },
       createdAt: Date.now()
     });
@@ -290,18 +314,18 @@ export async function resetTemplateCalibration(templateId: string): Promise<void
 }
 
 /**
- * Mengkalibrasi posisi ROI vektor berdasarkan citra riil dan hasil deteksi ground-truth Gemini.
- * Menghitung pergeseran (offset) dan skala aktual yang terjadi pada kamera fisik.
+ * Mengkalibrasi posisi ROI vektor berdasarkan citra fisik dan hasil yang telah diverifikasi sempurna oleh pengguna.
+ * Menghitung pergeseran (offset) dan skala aktual yang terjadi pada kamera fisik secara presisi dan terproteksi dari outlier.
  */
 export function calibrateVectorRoisFromScan(
   baselineRois: NormalizedBubbleROI[],
   canvas: HTMLCanvasElement,
-  groundTruth: {
+  confirmedResult: {
     nisn?: string;
     npsn?: string;
     id_mapel?: string;
     kode_tes?: string;
-    answers?: Array<{ nomor_soal: number; jawaban: string | string[] }>;
+    answers?: Array<{ nomor_soal: number; bentuk_soal?: string; jawaban: string | string[] }>;
   }
 ): NormalizedBubbleROI[] {
   const ctx = canvas.getContext('2d');
@@ -319,47 +343,49 @@ export function calibrateVectorRoisFromScan(
 
   baselineRois.forEach(b => {
     // A. Identitas vertikal
-    if (b.blockType === 'identity_npsn' && groundTruth.npsn) {
+    if (b.blockType === 'identity_npsn' && confirmedResult.npsn) {
       const match = b.id.match(/_col(\d+)_row(\d+)/);
       if (match) {
         const colIdx = parseInt(match[1], 10) - 1;
-        if (colIdx >= 0 && colIdx < groundTruth.npsn.length && b.value === groundTruth.npsn[colIdx]) {
+        if (colIdx >= 0 && colIdx < confirmedResult.npsn.length && b.value === confirmedResult.npsn[colIdx]) {
           confirmedBubbleIds.add(b.id);
         }
       }
-    } else if (b.blockType === 'identity_nisn' && groundTruth.nisn) {
+    } else if (b.blockType === 'identity_nisn' && confirmedResult.nisn) {
       const match = b.id.match(/_col(\d+)_row(\d+)/);
       if (match) {
         const colIdx = parseInt(match[1], 10) - 1;
-        if (colIdx >= 0 && colIdx < groundTruth.nisn.length && b.value === groundTruth.nisn[colIdx]) {
+        if (colIdx >= 0 && colIdx < confirmedResult.nisn.length && b.value === confirmedResult.nisn[colIdx]) {
           confirmedBubbleIds.add(b.id);
         }
       }
-    } else if (b.blockType === 'identity_subject' && groundTruth.id_mapel) {
+    } else if (b.blockType === 'identity_subject' && confirmedResult.id_mapel) {
       const match = b.id.match(/_col(\d+)_row(\d+)/);
       if (match) {
         const colIdx = parseInt(match[1], 10) - 1;
-        if (colIdx >= 0 && colIdx < groundTruth.id_mapel.length && b.value === groundTruth.id_mapel[colIdx]) {
+        if (colIdx >= 0 && colIdx < confirmedResult.id_mapel.length && b.value === confirmedResult.id_mapel[colIdx]) {
           confirmedBubbleIds.add(b.id);
         }
       }
-    } else if (b.blockType === 'identity_test' && groundTruth.kode_tes) {
+    } else if (b.blockType === 'identity_test' && confirmedResult.kode_tes) {
       const match = b.id.match(/_col(\d+)_row(\d+)/);
       if (match) {
         const colIdx = parseInt(match[1], 10) - 1;
-        if (colIdx >= 0 && colIdx < groundTruth.kode_tes.length && b.value === groundTruth.kode_tes[colIdx]) {
+        if (colIdx >= 0 && colIdx < confirmedResult.kode_tes.length && b.value === confirmedResult.kode_tes[colIdx]) {
           confirmedBubbleIds.add(b.id);
         }
       }
-    // B. Jawaban soal
-    } else if (groundTruth.answers && Array.isArray(groundTruth.answers)) {
-      groundTruth.answers.forEach(ans => {
+    // B. Jawaban soal (PG, Kompleks, BS3, YT3, Jodoh)
+    } else if (confirmedResult.answers && Array.isArray(confirmedResult.answers)) {
+      confirmedResult.answers.forEach(ans => {
         const qNum = ans.nomor_soal;
-        if (b.id.includes(`_q${qNum}_`) || b.id.includes(`_q${qNum}_sub`)) {
+        // Gunakan regex presisi agar nomor soal tidak salah cocok (misal 1 vs 10 atau 12)
+        const qRegex = new RegExp(`_q${qNum}(?:_sub(\\d+))?_opt(\\d+)`);
+        const qMatch = b.id.match(qRegex);
+        if (qMatch) {
           if (b.blockType === 'bs3' || b.blockType === 'yt3') {
-            const subMatch = b.id.match(/_sub(\d+)_/);
-            if (subMatch && Array.isArray(ans.jawaban)) {
-              const subIdx = parseInt(subMatch[1], 10);
+            const subIdx = qMatch[1] !== undefined ? parseInt(qMatch[1], 10) : -1;
+            if (subIdx >= 0 && Array.isArray(ans.jawaban)) {
               if (ans.jawaban[subIdx] && ans.jawaban[subIdx] === b.value) {
                 confirmedBubbleIds.add(b.id);
               }
@@ -380,11 +406,14 @@ export function calibrateVectorRoisFromScan(
     }
   });
 
-  // 2. Hitung offset rata-rata per blok dengan deteksi centroid disk kegelapan lokal
-  const blockOffsets: Record<string, { totalDx: number; totalDy: number; count: number }> = {};
-  let globalDx = 0;
-  let globalDy = 0;
-  let globalCount = 0;
+  // 2. Hitung pergeseran (offset) nyata pada citra kertas fisik
+  const blockOffsets: Record<string, { dxList: number[]; dyList: number[] }> = {};
+  const globalDxList: number[] = [];
+  const globalDyList: number[] = [];
+
+  // Ambang batas deviasi maksimum yang diizinkan (maks 2.5% dari lebar/tinggi lembar)
+  const MAX_ALLOWED_DEV_X = W * 0.025;
+  const MAX_ALLOWED_DEV_Y = H * 0.025;
 
   baselineRois.forEach(b => {
     if (!confirmedBubbleIds.has(b.id)) return;
@@ -393,9 +422,9 @@ export function calibrateVectorRoisFromScan(
     const py = Math.round(b.normY * H);
     const pr = Math.max(4, Math.round(b.normR * W));
 
-    // Jendela pencarian lokal ±16 piksel
-    const searchWindow = Math.max(14, Math.round(pr * 1.8));
-    const sampleR = Math.max(2, Math.round(pr * 0.5));
+    // Jendela pencarian lokal
+    const searchWindow = Math.min(22, Math.max(12, Math.round(pr * 1.6)));
+    const sampleR = Math.max(2, Math.round(pr * 0.45));
     let maxDarkness = 0;
     let bestX = px;
     let bestY = py;
@@ -432,46 +461,61 @@ export function calibrateVectorRoisFromScan(
       }
     }
 
-    // Jika menemukan bulatan terisi nyata (kontras gelap > 80 di atas kertas) dengan deviasi wajar (< 25px)
-    if (maxDarkness > 80 && Math.abs(bestX - px) < 25 && Math.abs(bestY - py) < 25) {
-      const dx = (bestX - px) / W;
-      const dy = (bestY - py) / H;
+    // Hanya terima deteksi jika kontras hitam bulatan cukup kuat (darkness > 75) dan pergeseran wajar
+    const devX = bestX - px;
+    const devY = bestY - py;
+    if (maxDarkness > 75 && Math.abs(devX) <= MAX_ALLOWED_DEV_X && Math.abs(devY) <= MAX_ALLOWED_DEV_Y) {
+      const dxNorm = devX / W;
+      const dyNorm = devY / H;
       const blkKey = String(b.blockId);
 
       if (!blockOffsets[blkKey]) {
-        blockOffsets[blkKey] = { totalDx: 0, totalDy: 0, count: 0 };
+        blockOffsets[blkKey] = { dxList: [], dyList: [] };
       }
-      blockOffsets[blkKey].totalDx += dx;
-      blockOffsets[blkKey].totalDy += dy;
-      blockOffsets[blkKey].count += 1;
+      blockOffsets[blkKey].dxList.push(dxNorm);
+      blockOffsets[blkKey].dyList.push(dyNorm);
 
-      globalDx += dx;
-      globalDy += dy;
-      globalCount += 1;
+      globalDxList.push(dxNorm);
+      globalDyList.push(dyNorm);
     }
   });
 
-  const avgGlobalDx = globalCount > 0 ? globalDx / globalCount : 0;
-  const avgGlobalDy = globalCount > 0 ? globalDy / globalCount : 0;
+  const getMedian = (list: number[]): number => {
+    if (list.length === 0) return 0;
+    const sorted = [...list].sort((a, b) => a - b);
+    const half = Math.floor(sorted.length / 2);
+    return sorted.length % 2 !== 0 ? sorted[half] : (sorted[half - 1] + sorted[half]) / 2;
+  };
 
-  // 3. Terapkan kalibrasi ke semua bulatan
+  const globalMedianDx = getMedian(globalDxList);
+  const globalMedianDy = getMedian(globalDyList);
+
+  // 3. Terapkan kalibrasi ke semua bulatan templat dengan interpolasi per-blok yang aman
   return baselineRois.map(b => {
     const blkKey = String(b.blockId);
-    const offset = blockOffsets[blkKey];
+    const blkOffset = blockOffsets[blkKey];
 
-    let applyDx = avgGlobalDx;
-    let applyDy = avgGlobalDy;
+    let applyDx = globalMedianDx;
+    let applyDy = globalMedianDy;
 
-    if (offset && offset.count >= 1) {
-      applyDx = offset.totalDx / offset.count;
-      applyDy = offset.totalDy / offset.count;
+    // Jika dalam blok tersebut terdapat setidaknya 2 sampel bulatan terdeteksi, gunakan median blok
+    if (blkOffset && blkOffset.dxList.length >= 2) {
+      applyDx = getMedian(blkOffset.dxList);
+      applyDy = getMedian(blkOffset.dyList);
+    } else if (blkOffset && blkOffset.dxList.length === 1) {
+      // Jika hanya 1 bulatan, campur dengan median global agar tidak bias
+      applyDx = (blkOffset.dxList[0] + globalMedianDx) / 2;
+      applyDy = (blkOffset.dyList[0] + globalMedianDy) / 2;
     }
+
+    // Batasi pergeseran maksimal 2% dari kanvas agar posisi tidak keluar jalur
+    const clampedDx = Math.max(-0.02, Math.min(0.02, applyDx));
+    const clampedDy = Math.max(-0.02, Math.min(0.02, applyDy));
 
     return {
       ...b,
-      normX: Math.max(0.01, Math.min(0.99, b.normX + applyDx)),
-      normY: Math.max(0.01, Math.min(0.99, b.normY + applyDy))
+      normX: Math.max(0.01, Math.min(0.99, b.normX + clampedDx)),
+      normY: Math.max(0.01, Math.min(0.99, b.normY + clampedDy))
     };
   });
 }
-

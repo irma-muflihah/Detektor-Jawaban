@@ -61,8 +61,6 @@
         Unduh
       </v-btn>
 
-      <GoogleAccountMenu />
-
       <v-btn
         icon
         variant="text"
@@ -119,7 +117,6 @@ import { useOmrStore } from './store/omrStore';
 import { exportSvgToPdf } from './utils/pdfExport';
 import { cleanupGroundTruthData } from './db/database';
 import GeminiSettingsDialog from './components/GeminiSettingsDialog.vue';
-import GoogleAccountMenu from './components/GoogleAccountMenu.vue';
 
 const isDark = ref(false);
 const showPdfDialog = ref(false);

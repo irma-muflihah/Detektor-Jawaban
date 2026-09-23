@@ -117,7 +117,10 @@
           <span class="font-weight-bold">{{ item.nisn }}</span>
         </template>
         <template v-slot:item.nama_siswa="{ item }">
-          <span class="text-caption font-weight-medium text-grey-darken-3">{{ item.nama_siswa || '-' }}</span>
+          <div class="d-flex align-center gap-1">
+            <span class="text-caption font-weight-medium text-grey-darken-3">{{ item.nama_siswa || '-' }}</span>
+            <v-icon v-if="item.is_calibrated" size="14" color="amber-darken-3" title="Tersimpan di Koleksi Kalibrasi Sempurna">mdi-star</v-icon>
+          </div>
         </template>
         
         <!-- Dinamis kolom jawaban -->
@@ -128,14 +131,24 @@
         </template>
 
         <template v-slot:item.actions="{ item }">
-          <v-btn
-            icon="mdi-delete-outline"
-            size="small"
-            variant="text"
-            color="error"
-            title="Hapus baris data"
-            @click.stop="openDialogDeleteSingle(item)"
-          ></v-btn>
+          <div class="d-flex align-center">
+            <v-btn
+              icon="mdi-eye-outline"
+              size="small"
+              variant="text"
+              color="primary"
+              title="Lihat detail & kalibrasi"
+              @click.stop="openDetailDialog(item)"
+            ></v-btn>
+            <v-btn
+              icon="mdi-delete-outline"
+              size="small"
+              variant="text"
+              color="error"
+              title="Hapus baris data"
+              @click.stop="openDialogDeleteSingle(item)"
+            ></v-btn>
+          </div>
         </template>
 
         <template v-slot:no-data>
@@ -241,6 +254,93 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Dialog Detail Hasil & Kalibrasi Sempurna -->
+    <v-dialog v-model="dialogDetail" max-width="650" scrollable>
+      <v-card class="rounded-xl overflow-hidden" v-if="selectedDetailItem">
+        <v-card-title class="pa-4 bg-grey-lighten-4 border-b d-flex align-center justify-space-between">
+          <div class="d-flex align-center gap-2">
+            <v-icon color="primary" size="24">mdi-file-document-outline</v-icon>
+            <div>
+              <div class="text-subtitle-1 font-weight-bold text-grey-darken-3">Detail Lembar Jawaban</div>
+              <div class="text-caption text-grey-darken-1">
+                {{ selectedDetailItem.nama_siswa ? selectedDetailItem.nama_siswa + ' • ' : '' }}NISN: {{ selectedDetailItem.nisn }}
+              </div>
+            </div>
+          </div>
+          <v-btn icon="mdi-close" variant="text" size="small" @click="dialogDetail = false"></v-btn>
+        </v-card-title>
+
+        <v-card-text class="pa-4">
+          <!-- Status Kalibrasi Badge -->
+          <div v-if="selectedDetailItem.is_calibrated" class="mb-3 pa-2 rounded-lg bg-amber-lighten-5 border border-amber d-flex align-center gap-2">
+            <v-icon color="amber-darken-3">mdi-star-check</v-icon>
+            <div class="text-caption font-weight-bold text-amber-darken-4">
+              Lembar ini telah terverifikasi sebagai Sampel Kalibrasi ROI Sempurna.
+            </div>
+          </div>
+
+          <!-- Pratinjau Citra Fisik LJK -->
+          <div v-if="selectedDetailItem.image_url" class="mb-4 bg-white rounded-lg border pa-2 text-center">
+            <div class="text-caption font-weight-bold text-grey-darken-2 mb-1 text-left">Citra Fisik Lembar Jawaban</div>
+            <img
+              :src="selectedDetailItem.image_url"
+              alt="Citra Lembar Jawaban"
+              style="max-height: 220px; max-width: 100%; object-fit: contain;"
+              class="rounded border bg-grey-lighten-4"
+            />
+          </div>
+
+          <!-- Profil Peserta -->
+          <div class="bg-grey-lighten-4 rounded-lg pa-3 border mb-4">
+            <div class="text-caption font-weight-bold text-grey-darken-2 mb-2 text-uppercase">Identitas Peserta</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <div><span class="text-grey-darken-1 text-caption">Nama:</span> <strong class="text-caption font-weight-bold ml-1">{{ selectedDetailItem.nama_siswa || '-' }}</strong></div>
+              <div><span class="text-grey-darken-1 text-caption">Kelas:</span> <strong class="text-caption font-weight-bold ml-1">{{ selectedDetailItem.kelas || '-' }}</strong></div>
+              <div><span class="text-grey-darken-1 text-caption">No. Peserta:</span> <strong class="text-caption font-weight-bold ml-1">{{ selectedDetailItem.no_peserta || '-' }}</strong></div>
+              <div><span class="text-grey-darken-1 text-caption">NISN:</span> <strong class="text-caption font-weight-bold ml-1">{{ selectedDetailItem.nisn || '-' }}</strong></div>
+              <div><span class="text-grey-darken-1 text-caption">NPSN:</span> <strong class="text-caption font-weight-bold ml-1">{{ selectedDetailItem.npsn || '-' }}</strong></div>
+              <div><span class="text-grey-darken-1 text-caption">Mapel / Tes:</span> <strong class="text-caption font-weight-bold ml-1">{{ selectedDetailItem.id_mapel }} / {{ selectedDetailItem.kode_tes }}</strong></div>
+            </div>
+          </div>
+
+          <!-- Rincian Jawaban -->
+          <div class="text-caption font-weight-bold text-grey-darken-2 mb-2 text-uppercase">
+            Jawaban Terdeteksi ({{ selectedDetailItem.answers?.length || 0 }} Butir)
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 6px; max-height: 180px; overflow-y: auto;" class="pa-1">
+            <div
+              v-for="ans in selectedDetailItem.answers"
+              :key="ans.nomor_soal"
+              class="pa-2 rounded border bg-white text-center"
+            >
+              <div class="text-caption text-grey-darken-1" style="font-size: 10px;">No. {{ ans.nomor_soal }}</div>
+              <div class="font-weight-black text-primary">{{ formatAnswer(ans.jawaban) }}</div>
+            </div>
+          </div>
+        </v-card-text>
+
+        <v-card-actions class="pa-4 bg-grey-lighten-4 border-t d-flex justify-space-between align-center flex-wrap gap-2">
+          <v-btn
+            v-if="selectedDetailItem.image_url && !selectedDetailItem.is_calibrated"
+            color="amber-darken-3"
+            variant="flat"
+            rounded="pill"
+            class="font-weight-bold text-white px-4"
+            prepend-icon="mdi-star-check"
+            :loading="isPromotingCalibration"
+            @click="promoteToCalibration(selectedDetailItem)"
+          >
+            Jadikan Koleksi Kalibrasi Sempurna
+          </v-btn>
+          <div v-else></div>
+
+          <v-btn color="primary" variant="flat" rounded="pill" class="px-6 font-weight-bold" @click="dialogDetail = false">
+            Tutup
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </v-container>
 
 </template>
@@ -249,6 +349,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { db, type ScanResult } from '../db/database';
 import { useOmrStore } from '../store/omrStore';
+import { calibrateVectorRoisFromScan, recordCalibrationSample } from '../utils/roiVectorService';
 
 const omrStore = useOmrStore();
 const scanHistoryList = ref<ScanResult[]>([]);
@@ -263,6 +364,68 @@ const deleteKodeTes = ref('');
 const dialogDeleteSingle = ref(false);
 const itemToDelete = ref<ScanResult | null>(null);
 const isDeletingSingle = ref(false);
+
+const dialogDetail = ref(false);
+const selectedDetailItem = ref<ScanResult | null>(null);
+const isPromotingCalibration = ref(false);
+
+const openDetailDialog = (item: ScanResult) => {
+  selectedDetailItem.value = item;
+  dialogDetail.value = true;
+};
+
+const promoteToCalibration = async (item: ScanResult) => {
+  if (!item.image_url) {
+    omrStore.showToast('Citra fisik tidak tersedia untuk lembar ini.', 'warning');
+    return;
+  }
+  isPromotingCalibration.value = true;
+  try {
+    const templates = await db.templates.toArray();
+    const targetTemplate = templates.find(t => t.id === item.template_id) || templates[0];
+    if (!targetTemplate) {
+      throw new Error('Templat LJK tidak ditemukan.');
+    }
+
+    const baseline = await db.templateRois.get(`${targetTemplate.id}_baseline`);
+    if (!baseline || !baseline.vectorRois.length) {
+      throw new Error('Baseline ROI templat belum dibuat.');
+    }
+
+    const img = new Image();
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = item.image_url!;
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth || 1000;
+    canvas.height = img.naturalHeight || 1414;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Gagal menginisiasi kanvas.');
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    const calibratedRois = calibrateVectorRoisFromScan(baseline.vectorRois, canvas, item);
+    await recordCalibrationSample(targetTemplate.id, calibratedRois, {
+      studentName: item.nama_siswa,
+      nisn: item.nisn,
+      modelName: item.engine === 'gemini' ? 'Gemini AI Vision' : 'OpenCV Audit',
+      imageWidth: canvas.width,
+      imageHeight: canvas.height,
+      isUserVerified: true,
+      notes: `Diverifikasi dari riwayat data (${item.nama_siswa ? item.nama_siswa + ' - ' : ''}NISN: ${item.nisn})`
+    });
+
+    item.is_calibrated = true;
+    await db.scanResults.put(item);
+    omrStore.showToast('Lembar LJK berhasil ditambahkan ke koleksi kalibrasi ROI sempurna!', 'success');
+  } catch (err: any) {
+    omrStore.showToast(`Gagal menambahkan kalibrasi: ${err.message}`, 'error');
+  } finally {
+    isPromotingCalibration.value = false;
+  }
+};
 
 const openDialogDeleteSpecific = () => {
   deleteIdMapel.value = '';

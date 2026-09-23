@@ -48,6 +48,8 @@ export interface ScanResult {
   engine?: string;
   image_url?: string;
   is_ground_truth?: boolean;
+  template_id?: string;
+  is_calibrated?: boolean;
 }
 
 export interface ScoreResult {
@@ -95,6 +97,12 @@ export interface TemplateRoiRecord {
     imageWidth?: number;
     imageHeight?: number;
     notes?: string;
+    isUserVerified?: boolean;
+    verifiedAt?: number;
+    studentName?: string;
+    nisn?: string;
+    sampleCount?: number;
+    calibratedBubbleCount?: number;
   };
   createdAt: number;
 }

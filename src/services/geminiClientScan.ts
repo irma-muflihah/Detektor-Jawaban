@@ -80,10 +80,21 @@ Petunjuk Khusus Ekstraksi Presisi:
    - Kode Tes: Periksa angka di kotak dan bulatan di bawahnya.
 
 3. Aturan Jawaban Soal (OMR):
-   - Periksa setiap butir nomor soal yang ada pada lembar LJK.
-   - Deteksi bulatan atau kotak yang dihitamkan secara tebal (pensil/pulpen). Abaikan bulatan/kotak yang kosong atau bekas hapusan tipis.
-   - Untuk tipe 'pg' (Pilihan Ganda Biasa): Masukkan 1 opsi huruf yang dipilih, misal ["A"] atau ["B"] atau ["C"] atau ["D"]. Jika kosong, kembalikan [].
-   - Untuk tipe 'kompleks' (Pilihan Ganda Kompleks): Berbentuk kotak centang/persegi. Dapat memiliki lebih dari satu pilihan jawaban. Masukkan SEMUA opsi kotak yang dihitamkan dalam array, misalnya ["B", "C", "D"], ["B", "D"], ["A", "C", "D"].
+   - Periksa setiap butir nomor soal yang ada pada lembar LJK secara visual objektif dan teliti.
+   - Deteksi bulatan atau kotak yang DIHITAMKAN/DIARSIR TEBAL menggunakan pensil atau pulpen hitam.
+   - PENTING: Abaikan bulatan atau kotak yang KOSONG (berlatar belakang kertas putih bersih) atau bekas hapusan tipis.
+
+   ★ ATURAN KHUSUS & KRUSIAL UNTUK TIPE 'kompleks' (PILIHAN GANDA KOMPLEKS - KOTAK PERSEGI):
+   - Pada lembar cetak LJK fisik asli, SETIAP kotak centang yang KOSONG memiliki cetakan huruf A, B, C, atau D di bagian dalamnya dengan LATAR BELAKANG PUTIH BERSIH.
+   - PERINGATAN: Huruf cetak bawaan di dalam kotak putih adalah KOTAK KOSONG (TIDAK DIPILIH). JANGAN SEKALI-KALI menganggap kotak berlatar putih sebagai jawaban terpilih!
+   - Kotak dinyatakan DIJAWAB/DIPILIH HANYA JIKA kotak tersebut diarsir/dihitamkan PEKAT dengan pensil atau pulpen sehingga latarnya menjadi hitam pekat atau hurufnya tertutup arsir hitam.
+   - Bandingkan kontras visual antar-kotak pada baris nomor soal yang sama:
+     * Jika hanya kotak D yang dihitamkan pensil pekat, sedangkan kotak A, B, C berlatar putih bersih dengan huruf cetak biasa -> jawaban HANYA ["D"], BUKAN ["A", "B", "C", "D"].
+     * Jika kotak A dan B dihitamkan pensil pekat, sedangkan kotak C dan D berlatar putih bersih -> jawaban HANYA ["A", "B"], BUKAN ["A", "B", "C", "D"].
+     * Jika hanya kotak A yang dihitamkan pensil pekat -> jawaban HANYA ["A"].
+     * DILARANG KERAS mengembalikan semua opsi ["A", "B", "C", "D"] kecuali jika keempat kotak tersebut benar-benar dihitamkan pekat oleh peserta ujian!
+
+   - Untuk tipe 'pg' (Pilihan Ganda Biasa): Berbentuk bulatan lingkaran. Masukkan 1 opsi huruf yang dihitamkan, misal ["A"] atau ["B"] atau ["C"] atau ["D"]. Jika kosong, kembalikan [].
    - Untuk tipe 'bs3' (Benar / Salah 3 Baris): Memiliki 3 baris sub-pernyataan dari atas ke bawah. Masukkan array persis 3 string untuk baris 1, 2, dan 3, misalnya ["B", "S", "S"] atau ["B", "B", "B"].
    - Untuk tipe 'jodoh' (Menjodohkan): Masukkan opsi huruf yang dihitamkan, misal ["A"] atau ["D"].
    - Jika butir soal tidak dijawab sama sekali, kembalikan array kosong [].

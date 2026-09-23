@@ -121,9 +121,12 @@ export function sampleBubbleCoreIntensity(
   cy: number,
   r: number,
   sheetW: number,
-  sheetH: number
+  sheetH: number,
+  isBox: boolean = false
 ): number {
-  const coreRadius = Math.max(2, Math.round(r * 0.46));
+  // Untuk bulatan lingkaran: coreRadius = 46% * r
+  // Untuk kotak centang persegi (kompleks): batas dalam kotak sekitar 65% dari r (lebar sampling ~13x13)
+  const coreRadius = isBox ? Math.max(3, Math.round(r * 0.65)) : Math.max(2, Math.round(r * 0.46));
 
   const x1 = Math.max(0, cx - coreRadius);
   const y1 = Math.max(0, cy - coreRadius);
@@ -256,7 +259,8 @@ export function extractOmrWithRelativeScoring(
             const cy = Math.round(vBubble.normY * sheetH);
             const br = Math.max(4, Math.round(vBubble.normR * sheetW));
 
-            const intensity = sampleBubbleCoreIntensity(threshMat, cv, cx, cy, br, sheetW, sheetH);
+            const isBox = Boolean(vBubble.isBox || block.type === 'kompleks');
+            const intensity = sampleBubbleCoreIntensity(threshMat, cv, cx, cy, br, sheetW, sheetH, isBox);
             rowSum += intensity;
             optionScores.push({ opt: vBubble.value, intensity });
 
@@ -280,12 +284,25 @@ export function extractOmrWithRelativeScoring(
         // 1. Pilihan Ganda Kompleks (Kotak Centang Mandiri)
         if (block.type === 'kompleks') {
           const selectedBoxes: string[] = [];
+          
+          // Cari batas intensitas terendah pada baris kotak ini sebagai baseline huruf cetak
+          const rowIntensities = optionScores.map(item => item.intensity);
+          const minIntensity = rowIntensities.length > 0 ? Math.min(...rowIntensities) : 0;
+
+          // Baseline huruf cetak kosong di dalam kotak bernilai 25-65.
+          // Kotak dinyatakan benar-benar diarsir pensil/pulpen pekat jika:
+          // 1. Intensitas absolut sangat tinggi (>= 115)
+          // 2. ATAU intensitas >= 85 DAN melampaui baseline kosong setidaknya 1.7x + 20
+          const dynamicThreshold = Math.max(105, minIntensity * 1.7 + 20);
+
           optionScores.forEach(item => {
-            // Kotak centang terisi jika intensitas inti >= 38
-            if (item.intensity >= 38) {
+            const isMarked = (item.intensity >= 115) || 
+                             (item.intensity >= 85 && item.intensity >= dynamicThreshold);
+            if (isMarked) {
               selectedBoxes.push(item.opt);
             }
           });
+
           if (selectedBoxes.length > 0) detectedMarksCount += selectedBoxes.length;
 
           answers.push({

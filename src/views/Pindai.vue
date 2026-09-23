@@ -147,40 +147,35 @@
                   ></v-switch>
                 </div>
 
-                <!-- Kontrol Kalibrasi ROI Vektor Berbasis Gemini AI -->
+                <!-- Kontrol Koleksi Kalibrasi ROI Presisi -->
                 <div class="w-100 mt-2 pt-2 border-t d-flex align-center flex-wrap justify-space-between gap-2">
                   <div class="d-flex align-center gap-2 flex-wrap">
-                    <v-switch
-                      v-model="enableAiCalibration"
-                      color="secondary"
-                      density="compact"
-                      hide-details
-                      label="Kalibrasi ROI dengan AI"
-                      title="Setiap scan sukses oleh Gemini AI akan menyempurnakan posisi ROI vektor untuk OpenCV"
-                    ></v-switch>
-
                     <v-chip
                       size="small"
                       :color="calibrationSampleCount > 0 ? 'secondary' : 'grey-darken-1'"
-                      variant="tonal"
+                      variant="flat"
                       class="font-weight-bold"
-                      prepend-icon="mdi-target"
+                      prepend-icon="mdi-target-account"
                     >
-                      {{ calibrationSampleCount > 0 ? `Terkalibrasi: ${calibrationSampleCount} Sampel AI (Resultan Presisi)` : 'ROI Vektor Baseline' }}
+                      {{ calibrationSampleCount > 0 ? `Kalibrasi: ${calibrationSampleCount} Sampel Sempurna (Resultan Aktif)` : 'ROI Vektor Baseline' }}
                     </v-chip>
+
+                    <span class="text-caption text-grey-darken-1 d-none d-sm-inline">
+                      Hanya proses yang Anda anggap sempurna yang disimpan ke koleksi kalibrasi.
+                    </span>
                   </div>
 
                   <div class="d-flex align-center gap-1">
                     <v-btn
-                      v-if="calibrationSampleCount > 0"
-                      size="x-small"
-                      color="error"
-                      variant="text"
-                      prepend-icon="mdi-refresh"
-                      @click="handleResetCalibration"
-                      title="Kembalikan ROI ke baseline awal perancang"
+                      size="small"
+                      color="secondary"
+                      variant="tonal"
+                      rounded="pill"
+                      prepend-icon="mdi-format-list-checks"
+                      class="text-none font-weight-bold"
+                      @click="showCalibrationCollectionDialog = true"
                     >
-                      Reset Kalibrasi
+                      Koleksi Kalibrasi ({{ calibrationSampleCount }})
                     </v-btn>
                   </div>
                 </div>
@@ -255,26 +250,9 @@
                     <v-icon size="48" :color="isDragging ? 'primary' : 'grey'" class="mb-2">mdi-cloud-upload</v-icon>
                     <h3 class="text-subtitle-1 font-weight-bold text-grey-darken-2 mb-1">Tarik & Lepas File LJK</h3>
                     <p class="text-caption text-grey-darken-1 mb-4">Mendukung format JPG, PNG, WEBP (bisa pilih sekaligus)</p>
-                    <div class="d-flex align-center justify-center flex-wrap gap-3">
-                      <v-btn color="primary" variant="tonal" rounded="pill" @click="triggerFileInput" prepend-icon="mdi-folder-upload">
-                        Pilih File Lokal
-                      </v-btn>
-                      <GoogleDrivePickerBtn
-                        label="Pilih dari Google Drive (Picker)"
-                        color="secondary"
-                        variant="flat"
-                        size="default"
-                        @files-selected="onDriveFilesSelected"
-                        @error="onDriveError"
-                      />
-                    </div>
-
-                    <div class="mt-4 pa-3 rounded-lg bg-grey-lighten-4 border d-flex align-center gap-2" style="max-width: 540px;">
-                      <v-icon color="primary" size="20">mdi-google-drive</v-icon>
-                      <span class="text-caption text-grey-darken-2">
-                        <strong>Google Drive:</strong> Anda dapat memilih beberapa citra LJK sekaligus atau langsung memilih sebuah folder Google Drive untuk memindai seluruh isinya.
-                      </span>
-                    </div>
+                    <v-btn color="primary" variant="tonal" rounded="pill" @click="triggerFileInput" prepend-icon="mdi-image-plus">
+                      Pilih File LJK
+                    </v-btn>
                   </div>
 
                   <div class="bg-white rounded-xl border pa-4 d-flex align-center justify-space-between flex-shrink-0">
@@ -558,22 +536,71 @@
                 </div>
               </div>
             </div>
+
+            <!-- OPSI VALIDASI KALIBRASI SEMPURNA OLEH PENGGUNA -->
+            <div class="bg-amber-lighten-5 rounded-lg border border-amber pa-3 d-flex align-center justify-space-between flex-wrap gap-2">
+              <div class="d-flex align-center gap-2">
+                <v-avatar color="amber-darken-3" size="32">
+                  <v-icon color="white" size="20">mdi-star</v-icon>
+                </v-avatar>
+                <div>
+                  <div class="text-caption font-weight-bold text-grey-darken-3">Validasi Hasil Sempurna (Koleksi Kalibrasi ROI)</div>
+                  <div class="text-caption text-grey-darken-2">
+                    Tandai lembar ini jika Anda menganggap hasilnya <strong>100% Sempurna & Akurat</strong> untuk disimpan ke koleksi kalibrasi ROI templat.
+                  </div>
+                </div>
+              </div>
+              <v-switch
+                v-model="markAsPerfectCalibration"
+                color="amber-darken-3"
+                density="compact"
+                hide-details
+                label="Jadikan Kalibrasi"
+              ></v-switch>
+            </div>
           </div>
         </v-card-text>
 
-        <v-card-actions class="pa-4 bg-white border-t d-flex justify-space-between align-center">
+        <v-card-actions class="pa-4 bg-white border-t d-flex justify-space-between align-center flex-wrap gap-2">
           <v-btn variant="text" color="grey-darken-1" rounded="pill" @click="cancelAiResult" prepend-icon="mdi-close">
             Batal / Pindai Ulang
           </v-btn>
-          <v-btn color="primary" variant="flat" rounded="pill" class="px-6 font-weight-bold" prepend-icon="mdi-content-save-check" @click="confirmAndSaveAiResult">
-            Simpan ke Basis Data
-          </v-btn>
+          <div class="d-flex gap-2">
+            <v-btn
+              color="primary"
+              variant="tonal"
+              rounded="pill"
+              class="font-weight-bold"
+              prepend-icon="mdi-content-save"
+              @click="confirmAndSaveAiResult(false)"
+            >
+              Simpan Biasa
+            </v-btn>
+            <v-btn
+              color="amber-darken-3"
+              variant="flat"
+              rounded="pill"
+              class="px-5 font-weight-bold text-white"
+              prepend-icon="mdi-star-check"
+              @click="confirmAndSaveAiResult(true)"
+            >
+              Simpan & Jadikan Kalibrasi Sempurna
+            </v-btn>
+          </div>
         </v-card-actions>
       </v-card>
     </v-dialog>
 
     <!-- Dialog Pengaturan Gemini API Key -->
     <GeminiSettingsDialog v-model="showApiKeyDialog" @saved="refreshGeminiHealth" />
+
+    <!-- Dialog Koleksi Sampel Kalibrasi ROI Sempurna -->
+    <CalibrationCollectionDialog
+      v-model="showCalibrationCollectionDialog"
+      :template-id="selectedTemplateId"
+      :template-name="selectedTemplate?.name"
+      @updated="refreshCalibrationInfo"
+    />
   </v-container>
 </template>
 
@@ -587,8 +614,7 @@ import {
   getTemplateRoisForScanning,
   saveBaselineRoi,
   calibrateVectorRoisFromScan,
-  recordCalibrationSample,
-  resetTemplateCalibration
+  recordCalibrationSample
 } from '../utils/roiVectorService';
 import { recognizeEssentialHandwriting, terminateOcrWorker } from '../services/tesseractOcr';
 import {
@@ -597,8 +623,7 @@ import {
 } from '../utils/imageOrientationService';
 import { extractOmrWithRelativeScoring, refineFiducialRegistration } from '../utils/omrExtractionService';
 import GeminiSettingsDialog from '../components/GeminiSettingsDialog.vue';
-import GoogleDrivePickerBtn from '../components/GoogleDrivePickerBtn.vue';
-import type { PickedDriveFile } from '../services/googleDrivePickerService';
+import CalibrationCollectionDialog from '../components/CalibrationCollectionDialog.vue';
 
 const omrStore = useOmrStore();
 
@@ -614,13 +639,14 @@ const scanEngine = ref<'gemini' | 'opencv'>('gemini');
 const previewBeforeSave = ref(true);
 const showAiPreviewDialog = ref(false);
 const showApiKeyDialog = ref(false);
+const showCalibrationCollectionDialog = ref(false);
+const markAsPerfectCalibration = ref(false);
 const pendingAiResult = ref<GeminiOmrResultData | null>(null);
 const pendingImageUrl = ref<string>('');
 const geminiStatus = ref<{ status: string; hasGeminiKey: boolean }>({ status: 'checking', hasGeminiKey: false });
 const activeModel = ref<string>(getStoredModel());
 
-// State Kalibrasi ROI AI
-const enableAiCalibration = ref(true);
+// State Kalibrasi ROI Presisi Sempurna
 const calibrationSampleCount = ref(0);
 const isCalibrating = ref(false);
 
@@ -634,17 +660,6 @@ const refreshCalibrationInfo = async () => {
     calibrationSampleCount.value = rois.totalSamples;
   } catch (err) {
     console.warn('Gagal memuat status kalibrasi:', err);
-  }
-};
-
-const handleResetCalibration = async () => {
-  if (!selectedTemplateId.value) return;
-  try {
-    await resetTemplateCalibration(selectedTemplateId.value);
-    await refreshCalibrationInfo();
-    omrStore.showToast('Data kalibrasi templat berhasil direset ke baseline awal.', 'info');
-  } catch (err: any) {
-    omrStore.showToast('Gagal mereset kalibrasi: ' + err.message, 'error');
   }
 };
 
@@ -1041,9 +1056,9 @@ const processOMRImage = async (imageSource: HTMLImageElement | HTMLVideoElement 
   }
 };
 
-// Fungsi pembelajaran kalibrasi otomatis dari hasil scan Gemini AI
-const learnFromGeminiResult = async (imageDataUrl: string, geminiData: GeminiOmrResultData) => {
-  if (!enableAiCalibration.value || !selectedTemplate.value) return;
+// Fungsi perekaman sampel kalibrasi ROI HANYA saat pengguna mengonfirmasi proses/hasil sempurna
+const calibrateAndSavePerfectSample = async (imageDataUrl: string, verifiedData: GeminiOmrResultData) => {
+  if (!selectedTemplate.value) return;
   try {
     isCalibrating.value = true;
     const img = new Image();
@@ -1063,17 +1078,22 @@ const learnFromGeminiResult = async (imageDataUrl: string, geminiData: GeminiOmr
     const baseline = await db.templateRois.get(`${selectedTemplate.value.id}_baseline`);
     const baselineRois = baseline?.vectorRois || [];
     if (baselineRois.length > 0) {
-      const calibratedRois = calibrateVectorRoisFromScan(baselineRois, canvas, geminiData);
+      const calibratedRois = calibrateVectorRoisFromScan(baselineRois, canvas, verifiedData);
       await recordCalibrationSample(selectedTemplate.value.id, calibratedRois, {
         modelName: activeModelLabel.value,
+        studentName: verifiedData.nama_siswa || '',
+        nisn: verifiedData.nisn || '',
         imageWidth: canvas.width,
         imageHeight: canvas.height,
-        notes: `Kalibrasi otomatis AI ${activeModelLabel.value}`
+        isUserVerified: true,
+        notes: `Diverifikasi sempurna oleh pengguna (${verifiedData.nama_siswa ? verifiedData.nama_siswa + ' - ' : ''}NISN: ${verifiedData.nisn || '-'})`
       });
       await refreshCalibrationInfo();
+      omrStore.showToast(`Sampel kalibrasi sempurna berhasil ditambahkan ke koleksi ROI! (Total: ${calibrationSampleCount.value})`, 'success');
     }
   } catch (err: any) {
-    console.warn('[Kalibrasi AI] Gagal menyimpan sampel kalibrasi:', err);
+    console.warn('[Kalibrasi ROI] Gagal menyimpan sampel kalibrasi:', err);
+    omrStore.showToast(`Gagal menyimpan kalibrasi ROI: ${err.message}`, 'error');
   } finally {
     isCalibrating.value = false;
   }
@@ -1082,6 +1102,7 @@ const learnFromGeminiResult = async (imageDataUrl: string, geminiData: GeminiOmr
 const saveScanResult = async (result: any) => {
   const scanData: ScanResult = {
     ...result,
+    template_id: result.template_id || selectedTemplate.value?.id,
     image_url: result.image_url || pendingImageUrl.value || undefined,
     scannedAt: Date.now()
   };
@@ -1130,13 +1151,14 @@ const captureAndScan = async () => {
 
         if (previewBeforeSave.value) {
           pendingAiResult.value = res.data;
+          markAsPerfectCalibration.value = false;
           showAiPreviewDialog.value = true;
         } else {
           await saveScanResult({
             ...res.data,
             engine: 'gemini'
           });
-          await learnFromGeminiResult(dataUrl, res.data);
+          // Catatan: Kalibrasi hanya disimpan jika pengguna memverifikasi dan menandai sempurna di pratinjau
           addSessionLog('success', `NISN: ${res.data.nisn}`, `Berhasil (${activeModelLabel.value})`, 'gemini');
           omrStore.showToast(`Berhasil dipindai (${activeModelLabel.value})! NISN: ${res.data.nisn}`, 'success');
         }
@@ -1184,21 +1206,32 @@ const captureAndScan = async () => {
   }
 };
 
-const confirmAndSaveAiResult = async () => {
+const confirmAndSaveAiResult = async (forceCalibrate?: boolean) => {
   if (!pendingAiResult.value) return;
+  const isPerfect = forceCalibrate !== undefined ? forceCalibrate : markAsPerfectCalibration.value;
   try {
     await saveScanResult({
       ...pendingAiResult.value,
+      is_calibrated: isPerfect,
       engine: 'gemini'
     });
-    if (pendingImageUrl.value) {
-      await learnFromGeminiResult(pendingImageUrl.value, pendingAiResult.value);
+
+    if (isPerfect && pendingImageUrl.value) {
+      await calibrateAndSavePerfectSample(pendingImageUrl.value, pendingAiResult.value);
+    } else {
+      omrStore.showToast(`Data NISN ${pendingAiResult.value.nisn || '-'} berhasil disimpan!`, 'success');
     }
-    addSessionLog('success', `NISN: ${pendingAiResult.value.nisn}`, 'Berhasil disimpan (Gemini AI)', 'gemini');
-    omrStore.showToast(`Data NISN ${pendingAiResult.value.nisn} berhasil disimpan!`, 'success');
+
+    addSessionLog(
+      'success',
+      `NISN: ${pendingAiResult.value.nisn || '-'}`,
+      `Berhasil disimpan (Gemini AI)${isPerfect ? ' [Sampel Kalibrasi Sempurna]' : ''}`,
+      'gemini'
+    );
     showAiPreviewDialog.value = false;
     pendingAiResult.value = null;
     pendingImageUrl.value = '';
+    markAsPerfectCalibration.value = false;
   } catch (err: any) {
     omrStore.showToast(`Gagal menyimpan: ${err.message}`, 'error');
   }
@@ -1208,6 +1241,7 @@ const cancelAiResult = () => {
   showAiPreviewDialog.value = false;
   pendingAiResult.value = null;
   pendingImageUrl.value = '';
+  markAsPerfectCalibration.value = false;
   omrStore.showToast('Pemindaian dibatalkan.', 'info');
 };
 
@@ -1236,19 +1270,6 @@ const addFilesToQueue = (files: File[]) => {
   imageFiles.forEach(file => {
     batchFiles.value.push({ file });
   });
-};
-
-const onDriveFilesSelected = (picked: PickedDriveFile[]) => {
-  if (!picked || picked.length === 0) return;
-  const newBatchItems: BatchFile[] = picked.map(p => ({
-    file: p.file
-  }));
-  batchFiles.value.push(...newBatchItems);
-  omrStore.showToast(`Berhasil menambahkan ${picked.length} berkas citra LJK dari Google Drive.`, 'success');
-};
-
-const onDriveError = (errMsg: string) => {
-  omrStore.showToast(errMsg, 'error');
 };
 
 const fileToDataUrl = (file: File): Promise<string> => {
@@ -1309,7 +1330,7 @@ const processBatchQueue = async () => {
             ...res.data,
             engine: 'gemini'
           });
-          await learnFromGeminiResult(dataUrl, res.data);
+          // Catatan: Kalibrasi tidak otomatis ditambahkan pada pemrosesan batch
           addSessionLog('success', batchFile.file.name, `Berhasil (${activeModelLabel.value} - NISN: ${res.data.nisn})`, 'gemini');
         } catch (geminiErr: any) {
           const errMsg = geminiErr.message || String(geminiErr);
