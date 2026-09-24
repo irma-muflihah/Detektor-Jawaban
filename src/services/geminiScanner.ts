@@ -13,6 +13,7 @@ export interface GeminiOmrResultData {
   tanggal_ujian?: string;
   confidence_score: number;
   scan_notes?: string;
+  engine?: string;
   answers: Array<{
     nomor_soal: number;
     bentuk_soal: string;

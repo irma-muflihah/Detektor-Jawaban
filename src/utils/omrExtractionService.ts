@@ -110,9 +110,10 @@ export function refineFiducialRegistration(
 }
 
 /**
- * Mengukur densitas kegelapan bulatan murni pada inti dalamnya (Core Sampling).
- * Radius sampling ditetapkan sebesar 46% dari radius bulatan (r_core = 0.46 * r),
- * sehingga sama sekali tidak mengenai garis tepi bulatan pensil atau garis batas kotak centang.
+ * Mengukur densitas kegelapan bulatan murni pada inti dalamnya (Core Sampling) dengan Micro-Peak Snapping.
+ * Radius sampling ditetapkan sebesar 46% dari radius bulatan (r_core = 0.46 * r) untuk lingkaran,
+ * dan 65% untuk kotak centang (kompleks), menghindari garis tepi cetakan.
+ * Dilengkapi pencarian mikro (±2px) untuk mengompensasi distorsi pergeseran cetakan atau perspektif.
  */
 export function sampleBubbleCoreIntensity(
   threshMat: any,
@@ -124,26 +125,45 @@ export function sampleBubbleCoreIntensity(
   sheetH: number,
   isBox: boolean = false
 ): number {
-  // Untuk bulatan lingkaran: coreRadius = 46% * r
-  // Untuk kotak centang persegi (kompleks): batas dalam kotak sekitar 65% dari r (lebar sampling ~13x13)
   const coreRadius = isBox ? Math.max(3, Math.round(r * 0.65)) : Math.max(2, Math.round(r * 0.46));
 
-  const x1 = Math.max(0, cx - coreRadius);
-  const y1 = Math.max(0, cy - coreRadius);
-  const x2 = Math.min(sheetW - 1, cx + coreRadius);
-  const y2 = Math.min(sheetH - 1, cy + coreRadius);
+  // Evaluasi titik pusat dan offset mikro (±2px) untuk mengatasi pergeseran cetakan/distorsi lensa
+  let maxMean = 0;
+  const offsets = [
+    [0, 0],
+    [-2, 0], [2, 0],
+    [0, -2], [0, 2]
+  ];
 
-  const w = x2 - x1;
-  const h = y2 - y1;
+  for (let i = 0; i < offsets.length; i++) {
+    const ox = offsets[i][0];
+    const oy = offsets[i][1];
+    const curX = cx + ox;
+    const curY = cy + oy;
 
-  if (w <= 0 || h <= 0) return 0;
+    const x1 = Math.max(0, curX - coreRadius);
+    const y1 = Math.max(0, curY - coreRadius);
+    const x2 = Math.min(sheetW - 1, curX + coreRadius);
+    const y2 = Math.min(sheetH - 1, curY + coreRadius);
 
-  const rect = new cv.Rect(x1, y1, w, h);
-  const roi = threshMat.roi(rect);
-  const mean = cv.mean(roi);
-  roi.delete();
+    const w = x2 - x1;
+    const h = y2 - y1;
 
-  return mean[0];
+    if (w <= 0 || h <= 0) continue;
+
+    const rect = new cv.Rect(x1, y1, w, h);
+    const roi = threshMat.roi(rect);
+    const mean = cv.mean(roi);
+    roi.delete();
+
+    if (mean[0] > maxMean) {
+      maxMean = mean[0];
+    }
+    // Jika sudah sangat pekat (>= 180), tidak perlu mencari offset lain
+    if (maxMean >= 180) break;
+  }
+
+  return maxMean;
 }
 
 /**

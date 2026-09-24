@@ -35,7 +35,7 @@
     <v-app-bar color="surface" elevation="0" class="border-b">
       <div class="d-flex align-center ml-4">
         <span class="font-weight-bold text-subtitle-1 text-grey-darken-3">Detektor Jawaban</span>
-        <v-chip size="x-small" color="primary" class="ml-2 font-weight-bold" variant="flat">DEJAWAB</v-chip>
+        <v-chip size="x-small" color="primary" class="ml-2 font-weight-bold" variant="flat">SMPN 2 KEMRANJEN</v-chip>
       </div>
 
       <v-spacer></v-spacer>

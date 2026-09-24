@@ -412,3 +412,116 @@ export function downloadJsonFile(data: unknown, filename: string): void {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
+
+/**
+ * Mengimpor berkas JSON template LJK (baik format OmrRoiJsonExport lengkap maupun objek OmrTemplate)
+ * menjadi struktur OmrTemplate internal aplikasi lengkap dengan pemetaan seluruh blok dan ROI.
+ */
+export function importOmrTemplateFromJson(input: string | Record<string, any>): OmrTemplate {
+  const data = typeof input === 'string' ? JSON.parse(input) : input;
+  if (!data || typeof data !== 'object') {
+    throw new Error('Format JSON tidak valid.');
+  }
+
+  let templateName = 'PENILAIAN TENGAH SEMESTER (PTS) - SMPN 2 KEMRANJEN';
+  let templateId = 'tpl_' + Date.now().toString(36);
+  let rawBlocks: any[] = [];
+
+  if (data.metadata?.template_name) {
+    templateName = data.metadata.template_name;
+    templateId = data.metadata.template_id || templateId;
+    rawBlocks = data.blocks || [];
+  } else if (data.name && Array.isArray(data.blocks)) {
+    templateName = data.name;
+    templateId = data.id || templateId;
+    rawBlocks = data.blocks;
+  } else if (Array.isArray(data.blocks)) {
+    rawBlocks = data.blocks;
+  } else if (Array.isArray(data)) {
+    rawBlocks = data;
+  } else {
+    throw new Error('Data JSON tidak memiliki blok elemen LJK yang dikenali.');
+  }
+
+  const convertedBlocks: TemplateBlock[] = rawBlocks.map((b: any, index: number) => {
+    const blockId = b.id ?? (index + 1);
+    const x = b.bounding_box?.x ?? b.x ?? 90;
+    const y = b.bounding_box?.y ?? b.y ?? (135 + index * 100);
+    const type = b.type || 'biasa';
+    const title = b.title || `Blok ${blockId}`;
+    const direction = b.direction || (type.startsWith('identity_') ? 'vertical' : (type === 'handwritten_identity' ? 'handwritten' : (type === 'teks_kustom' ? 'teks' : 'horizontal')));
+
+    const block: TemplateBlock = {
+      id: blockId,
+      x: Number(x),
+      y: Number(y),
+      type,
+      title,
+      direction
+    };
+
+    if (direction === 'handwritten' || type === 'handwritten_identity') {
+      block.cols = 0;
+      block.rows = 0;
+      block.options = [];
+      block.prefillValue = '';
+      return block;
+    }
+
+    if (direction === 'vertical' || type.startsWith('identity_')) {
+      const cols = b.digit_boxes?.length || b.cols || (type === 'identity_nisn' ? 10 : (type === 'identity_npsn' ? 8 : 2));
+      const rows = b.rows || 10;
+      const opts = b.options && b.options.length > 0 
+        ? b.options 
+        : (b.bubbles && b.bubbles.length > 0 ? Array.from(new Set(b.bubbles.map((bub: any) => String(bub.value)))) : ['0','1','2','3','4','5','6','7','8','9']);
+      let prefill = b.prefillValue || '';
+      if (!prefill && b.digit_boxes && Array.isArray(b.digit_boxes)) {
+        prefill = b.digit_boxes.map((d: any) => d.prefill_char || '').join('');
+      }
+      block.cols = Number(cols);
+      block.rows = Number(rows);
+      block.options = opts;
+      block.prefillValue = String(prefill);
+      return block;
+    }
+
+    if (direction === 'teks' || type === 'teks_kustom') {
+      block.cols = b.bounding_box?.width || b.cols || 345;
+      block.rows = b.bounding_box?.height || b.rows || 115;
+      block.prefillValue = b.custom_text || b.prefillValue || '';
+      return block;
+    }
+
+    // Blok soal horizontal (biasa, bs3, yt3, kompleks, jodoh)
+    let startNum = b.startNum || 1;
+    if (b.questions && b.questions.length > 0) {
+      startNum = b.questions[0].question_num || startNum;
+    }
+    const isTriple = type === 'bs3' || type === 'yt3';
+    let rowCount = b.rows || 1;
+    if (b.questions && b.questions.length > 0) {
+      rowCount = isTriple ? Math.ceil(b.questions.length / 3) : b.questions.length;
+    }
+    let opts = b.options || [];
+    if (opts.length === 0 && b.questions?.[0]?.bubbles) {
+      opts = b.questions[0].bubbles.map((bub: any) => bub.value);
+    }
+    if (opts.length === 0) {
+      opts = isTriple ? ['B', 'S'] : ['A', 'B', 'C', 'D'];
+    }
+
+    block.startNum = Number(startNum);
+    block.rows = Number(rowCount);
+    block.options = opts;
+
+    return block;
+  });
+
+  return {
+    id: String(templateId),
+    name: templateName,
+    updatedAt: Date.now(),
+    autoLayout: false,
+    blocks: convertedBlocks
+  };
+}

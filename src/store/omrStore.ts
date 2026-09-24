@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { db, type OmrTemplate, type TemplateBlock, type BubbleROI } from '../db/database';
 import { saveBaselineRoi } from '../utils/roiVectorService';
+import { importOmrTemplateFromJson } from '../utils/roiExporter';
 import { ref } from 'vue';
 
 export const useOmrStore = defineStore('omr', () => {
@@ -55,11 +56,11 @@ export const useOmrStore = defineStore('omr', () => {
     return bubbles;
   };
 
-  // Inisiasi templat "Lembar Jawaban Latihan TKA 1" persis sesuai desain LJK_LTKA_1.jpg dengan proporsi vertikal ideal
-  const createInitialTKATemplate = (): OmrTemplate => {
+  // Templat Default LJK Standar SMPN 2 Kemranjen untuk semua mata pelajaran dengan ROI presisi
+  const createDefaultTemplate = (): OmrTemplate => {
     const tpl: OmrTemplate = {
-      id: 'tpl_latihan_tka',
-      name: 'Lembar Jawaban Latihan TKA 1',
+      id: 'tpl_smpn2_kemranjen',
+      name: 'PENILAIAN TENGAH SEMESTER (PTS) - SMPN 2 KEMRANJEN',
       updatedAt: Date.now(),
       autoLayout: false,
       blocks: [
@@ -89,7 +90,7 @@ export const useOmrStore = defineStore('omr', () => {
           options: ['0','1','2','3','4','5','6','7','8','9'],
           prefillValue: ''
         },
-        // 3. NPSN (8 kolom, default terisi 20301942)
+        // 3. NPSN (8 kolom, baku terisi NPSN SMPN 2 Kemranjen: 20301942)
         {
           id: 3,
           x: 442,
@@ -102,7 +103,7 @@ export const useOmrStore = defineStore('omr', () => {
           options: ['0','1','2','3','4','5','6','7','8','9'],
           prefillValue: '20301942'
         },
-        // 4. ID Mapel (2 kolom)
+        // 4. ID Mapel (2 kolom, general dapat diisi kode mapel apa saja)
         {
           id: 4,
           x: 725,
@@ -164,7 +165,7 @@ export const useOmrStore = defineStore('omr', () => {
           options: ['B', 'S'],
           startNum: 16
         },
-        // 9. Pilihan Ganda Kompleks (PG Kompleks: No. 19 - 24)
+        // 9. Pilihan Ganda Kompleks (PG Kompleks Kotak: No. 19 - 24)
         {
           id: 9,
           x: 680,
@@ -200,7 +201,7 @@ export const useOmrStore = defineStore('omr', () => {
           options: ['A', 'B', 'C', 'D'],
           startNum: 28
         },
-        // 12. Catatan / Keterangan
+        // 12. Catatan / Petunjuk Ujian
         {
           id: 12,
           x: 565,
@@ -210,7 +211,7 @@ export const useOmrStore = defineStore('omr', () => {
           direction: 'teks',
           cols: 345,
           rows: 115,
-          prefillValue: 'Jaga lembar jawaban agar tidak terlipat, basah, robek, atau kotor, serta pastikan tidak ada coretan lain agar lembar ujianmu terbaca sempurna oleh mesin pemindai.'
+          prefillValue: 'Jaga lembar jawaban agar tidak terlipat, basah, robek, atau kotor, serta pastikan tidak ada coretan lain agar lembar ujianmu terbaca sempurna oleh mesin pemindai SMPN 2 Kemranjen.'
         }
       ]
     };
@@ -219,6 +220,8 @@ export const useOmrStore = defineStore('omr', () => {
     });
     return tpl;
   };
+
+  const createInitialTKATemplate = createDefaultTemplate;
 
   const getDefaultBlocks = (): TemplateBlock[] => [
     { id: 1, x: 90, y: 135, type: 'handwritten_identity', title: 'Data Peserta', direction: 'handwritten', cols: 0, rows: 0, options: [], prefillValue: '' },
@@ -245,8 +248,8 @@ export const useOmrStore = defineStore('omr', () => {
   };
 
   const savedTemplates = ref<OmrTemplate[]>([]);
-  // UX: Ketika menu desain dibuka pertama kali atau saat mulai baru, bagian soal TETAP KOSONG
-  const activeTemplate = ref<OmrTemplate>(createCleanEmptyTemplate());
+  // Standar Default: Membuka template LJK SMPN 2 Kemranjen lengkap dengan 30 butir soal dan seluruh ROI
+  const activeTemplate = ref<OmrTemplate>(createDefaultTemplate());
   const snackbar = ref({ show: false, text: '', color: 'info' });
 
   const showToast = (text: string, color = 'info') => {
@@ -257,20 +260,25 @@ export const useOmrStore = defineStore('omr', () => {
     try {
       let data = await db.templates.orderBy('updatedAt').reverse().toArray();
 
-      // Pastikan templat inisiasi "Lembar Jawaban Latihan TKA 1" selalu tersedia di database koleksi
-      const tkaIdx = data.findIndex(t => t.name === 'Lembar Jawaban Latihan TKA 1' || t.name === 'Lembar Jawaban Latihan TKA' || t.id === 'tpl_latihan_tka');
-      const initialTpl = createInitialTKATemplate();
+      // Pastikan templat default "PENILAIAN TENGAH SEMESTER (PTS) - SMPN 2 KEMRANJEN" selalu tersedia di database
+      const defaultTpl = createDefaultTemplate();
+      const existingIdx = data.findIndex(t => 
+        t.id === 'tpl_smpn2_kemranjen' || 
+        t.id === 'tpl_latihan_tka' ||
+        t.name === 'PENILAIAN TENGAH SEMESTER (PTS) - SMPN 2 KEMRANJEN' ||
+        t.name === 'Lembar Jawaban Latihan TKA 1'
+      );
 
-      if (tkaIdx === -1) {
-        await db.templates.put(initialTpl);
-        data.unshift(initialTpl);
+      if (existingIdx === -1) {
+        await db.templates.put(defaultTpl);
+        data.unshift(defaultTpl);
       } else {
-        // Perbarui jika templat TKA lama masih memakai konfigurasi lama atau koordinat lama yang terlalu ke atas (y < 130)
-        const isOldCoordinates = data[tkaIdx].blocks[0] && data[tkaIdx].blocks[0].y < 130;
-        if (data[tkaIdx].blocks.length < 12 || data[tkaIdx].name !== 'Lembar Jawaban Latihan TKA 1' || isOldCoordinates) {
-          await db.templates.put(initialTpl);
-          data[tkaIdx] = initialTpl;
+        // Perbarui jika templat lama masih memakai nama atau ID lama
+        if (data[existingIdx].id === 'tpl_latihan_tka') {
+          await db.templates.delete('tpl_latihan_tka');
         }
+        await db.templates.put(defaultTpl);
+        data[existingIdx] = defaultTpl;
       }
 
       const migratedData = data.map(template => {
@@ -325,12 +333,31 @@ export const useOmrStore = defineStore('omr', () => {
         } catch (_) {}
       });
 
-      // PENTING UNTUK UX: Jika activeTemplate belum diset atau memakai koordinat lama yang terlalu ke atas, perbarui
-      if (!activeTemplate.value.id || (activeTemplate.value.blocks?.[0] && activeTemplate.value.blocks[0].y < 130)) {
-        activeTemplate.value = createCleanEmptyTemplate();
+      // UX: Jika activeTemplate masih kosong (misal hanya blok identitas <= 5) atau belum ber-ID, gunakan templat default
+      if (!activeTemplate.value.id || activeTemplate.value.blocks.length <= 5) {
+        activeTemplate.value = JSON.parse(JSON.stringify(data[0] || defaultTpl));
       }
     } catch (error: any) {
       showToast(`Gagal memuat templat: ${error.message}`, 'error');
+    }
+  };
+
+  const importTemplateFromJson = async (jsonInput: string | Record<string, any>): Promise<OmrTemplate> => {
+    try {
+      const imported = importOmrTemplateFromJson(jsonInput);
+      imported.blocks.forEach(b => {
+        b.bubbles = computeBlockBubbles(b);
+      });
+      imported.updatedAt = Date.now();
+      await db.templates.put(imported);
+      await saveBaselineRoi(imported);
+      activeTemplate.value = imported;
+      await loadTemplatesFromDB();
+      showToast(`Templat berhasil diimpor: ${imported.name}`, 'success');
+      return imported;
+    } catch (err: any) {
+      showToast(`Gagal mengimpor templat: ${err.message}`, 'error');
+      throw err;
     }
   };
 
@@ -368,6 +395,11 @@ export const useOmrStore = defineStore('omr', () => {
     activeTemplate.value = createCleanEmptyTemplate();
   };
 
+  const resetToDefaultTemplate = () => {
+    activeTemplate.value = createDefaultTemplate();
+    showToast('Templat dikembalikan ke standar default SMPN 2 Kemranjen.', 'info');
+  };
+
   const openTemplate = (templateData: OmrTemplate) => {
     const cloned = JSON.parse(JSON.stringify(templateData));
     cloned.blocks.forEach((b: TemplateBlock) => {
@@ -392,9 +424,12 @@ export const useOmrStore = defineStore('omr', () => {
     showToast,
     computeBlockBubbles,
     loadTemplatesFromDB,
+    importTemplateFromJson,
     saveTemplate,
     deleteTemplate,
     createNewTemplate,
+    resetToDefaultTemplate,
+    createDefaultTemplate,
     createInitialTKATemplate,
     createCleanEmptyTemplate,
     clearQuestionBlocks,

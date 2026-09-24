@@ -593,7 +593,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { useOmrStore } from '../store/omrStore';
 import { db, type ScanResult, type OmrTemplate, type NormalizedBubbleROI } from '../db/database';
@@ -1300,7 +1300,6 @@ const saveUpdatedAnswers = async (asPerfectCalibration: boolean) => {
             nisn: updatedRecord.nisn,
             id_mapel: updatedRecord.id_mapel,
             kode_tes: updatedRecord.kode_tes,
-            nama_siswa: updatedRecord.nama_siswa,
             answers: updatedRecord.answers
           });
 

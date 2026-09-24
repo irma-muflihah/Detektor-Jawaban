@@ -46,6 +46,18 @@
         </div>
 
         <v-btn 
+          block 
+          color="indigo-darken-1" 
+          variant="tonal" 
+          size="small" 
+          class="text-none font-weight-bold rounded-lg mb-2" 
+          prepend-icon="mdi-restore" 
+          @click="omrStore.resetToDefaultTemplate"
+        >
+          Default SMPN 2 Kemranjen
+        </v-btn>
+
+        <v-btn 
           v-if="hasQuestionBlocks" 
           block 
           color="warning" 
@@ -58,17 +70,28 @@
           Kosongkan Bagian Soal
         </v-btn>
 
-        <v-btn 
-          block 
-          color="teal-darken-2" 
-          variant="tonal" 
-          size="small" 
-          class="text-none font-weight-bold rounded-lg" 
-          prepend-icon="mdi-code-json" 
-          @click="openJsonExportDialog"
-        >
-          Ekspor JSON (ROI Lengkap)
-        </v-btn>
+        <div class="d-flex gap-2 mb-2">
+          <v-btn 
+            color="primary" 
+            variant="tonal" 
+            size="small" 
+            class="flex-grow-1 text-none font-weight-bold rounded-lg" 
+            prepend-icon="mdi-file-upload-outline" 
+            @click="openJsonImportDialog"
+          >
+            Impor JSON (ROI)
+          </v-btn>
+          <v-btn 
+            color="teal-darken-2" 
+            variant="tonal" 
+            size="small" 
+            class="flex-grow-1 text-none font-weight-bold rounded-lg" 
+            prepend-icon="mdi-code-json" 
+            @click="openJsonExportDialog"
+          >
+            Ekspor JSON
+          </v-btn>
+        </div>
       </div>
 
       <div class="bg-white rounded-xl border pa-5 shadow-sm">
@@ -216,6 +239,16 @@
         </div>
 
         <div class="d-flex align-center gap-2">
+          <v-btn
+            size="small"
+            color="indigo-darken-1"
+            variant="tonal"
+            class="text-none font-weight-bold rounded-lg"
+            prepend-icon="mdi-file-upload-outline"
+            @click="openJsonImportDialog"
+          >
+            Impor JSON
+          </v-btn>
           <v-btn
             size="small"
             color="teal-darken-1"
@@ -419,6 +452,89 @@
               Unduh Berkas .json
             </v-btn>
           </div>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Dialog Impor Desain JSON & Koordinat ROI -->
+    <v-dialog v-model="showImportJsonDialog" max-width="700" scrollable>
+      <v-card class="rounded-xl overflow-hidden shadow-2xl">
+        <v-card-title class="pa-4 bg-slate-900 text-white d-flex align-center justify-space-between">
+          <div class="d-flex align-center">
+            <v-icon color="indigo-lighten-2" icon="mdi-file-upload-outline" class="mr-2"></v-icon>
+            <div>
+              <div class="text-subtitle-1 font-weight-bold">Impor Desain LJK & Koordinat ROI (JSON)</div>
+              <div class="text-caption text-grey-lighten-1">Muat berkas JSON ROI templat LJK untuk langsung diterapkan ke kanvas</div>
+            </div>
+          </div>
+          <v-btn icon="mdi-close" variant="text" color="white" density="compact" @click="showImportJsonDialog = false"></v-btn>
+        </v-card-title>
+
+        <v-card-text class="pa-4 bg-grey-lighten-5">
+          <!-- Pilihan Unggah Berkas -->
+          <div class="mb-4">
+            <label class="text-caption font-weight-bold text-grey-darken-3 mb-1 d-block">Pilih Berkas JSON dari Perangkat:</label>
+            <div class="d-flex align-center gap-2">
+              <input ref="fileInputRef" type="file" accept=".json,application/json" class="d-none" @change="handleImportFileUpload" />
+              <v-btn
+                variant="outlined"
+                color="primary"
+                rounded="lg"
+                prepend-icon="mdi-paperclip"
+                class="text-none font-weight-bold"
+                @click="triggerImportFilePick"
+              >
+                Pilih Berkas (.json)
+              </v-btn>
+              <span v-if="importedFileName" class="text-caption text-grey-darken-2 font-weight-medium">
+                {{ importedFileName }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Pilihan Tempel Teks JSON -->
+          <div>
+            <label class="text-caption font-weight-bold text-grey-darken-3 mb-1 d-block">Atau Tempelkan Struktur Kode JSON:</label>
+            <v-textarea
+              v-model="importJsonText"
+              placeholder="Tempel teks JSON di sini (mendukung format OmrRoiJsonExport lengkap atau OmrTemplate)..."
+              variant="outlined"
+              density="comfortable"
+              rows="9"
+              auto-grow
+              class="font-mono text-caption bg-white"
+              hide-details
+            ></v-textarea>
+          </div>
+
+          <v-alert
+            v-if="importJsonError"
+            type="error"
+            variant="tonal"
+            density="compact"
+            class="mt-3 rounded-lg text-caption"
+            closable
+            @click:close="importJsonError = ''"
+          >
+            {{ importJsonError }}
+          </v-alert>
+        </v-card-text>
+
+        <v-card-actions class="pa-4 bg-white border-t d-flex justify-space-between align-center">
+          <v-btn variant="text" color="grey-darken-1" rounded="pill" @click="showImportJsonDialog = false">
+            Batal
+          </v-btn>
+          <v-btn
+            color="primary"
+            variant="flat"
+            rounded="pill"
+            class="px-5 font-weight-bold text-none"
+            prepend-icon="mdi-check"
+            :loading="isImporting"
+            @click="executeImportJson"
+          >
+            Terapkan & Simpan Desain
+          </v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -915,14 +1031,67 @@ const copyJsonToClipboard = async () => {
   }
 };
 
+// State dan Handler Impor JSON
+const showImportJsonDialog = ref(false);
+const importJsonText = ref('');
+const importJsonError = ref('');
+const importedFileName = ref('');
+const isImporting = ref(false);
+const fileInputRef = ref<HTMLInputElement | null>(null);
+
+const triggerImportFilePick = () => {
+  if (fileInputRef.value) {
+    fileInputRef.value.click();
+  }
+};
+
+const openJsonImportDialog = () => {
+  importJsonText.value = '';
+  importJsonError.value = '';
+  importedFileName.value = '';
+  showImportJsonDialog.value = true;
+};
+
+const handleImportFileUpload = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  if (!target.files || target.files.length === 0) return;
+  const file = target.files[0];
+  importedFileName.value = file.name;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    importJsonText.value = String(e.target?.result || '');
+    importJsonError.value = '';
+  };
+  reader.onerror = () => {
+    importJsonError.value = 'Gagal membaca berkas JSON dari penyimpanan.';
+  };
+  reader.readAsText(file);
+};
+
+const executeImportJson = async () => {
+  if (!importJsonText.value.trim()) {
+    importJsonError.value = 'Silakan pilih berkas JSON atau tempel teks JSON terlebih dahulu.';
+    return;
+  }
+  isImporting.value = true;
+  importJsonError.value = '';
+  try {
+    const imported = await omrStore.importTemplateFromJson(importJsonText.value);
+    selectedTemplateToLoad.value = imported.id;
+    recalculateQuestionNumbers();
+    showImportJsonDialog.value = false;
+  } catch (err: any) {
+    importJsonError.value = err.message || 'Format JSON tidak valid atau struktur tidak dikenali.';
+  } finally {
+    isImporting.value = false;
+  }
+};
+
 onMounted(async () => {
   await omrStore.loadTemplatesFromDB();
-  // Pastikan jika aktif templat belum ada ID, buat lembar baru dengan area soal kosong
+  // Pastikan templat aktif tersedia; jika belum ada atau kosong, aktifkan templat standar SMPN 2 Kemranjen
   if (!omrStore.activeTemplate.id || omrStore.activeTemplate.blocks.length === 0) {
-    omrStore.createNewTemplate();
-    autoLayoutBlocks(true);
-  } else {
-    autoLayoutBlocks();
+    omrStore.resetToDefaultTemplate();
   }
 });
 </script>

@@ -7,7 +7,11 @@
         </h2>
         <p class="text-subtitle-1 text-grey-darken-1">Kelola desain Lembar Jawab Komputer Anda.</p>
       </v-col>
-      <v-col cols="12" md="6" class="text-md-right">
+      <v-col cols="12" md="6" class="text-md-right d-flex justify-md-end gap-2 flex-wrap">
+        <input ref="dashboardFileInputRef" type="file" accept=".json,application/json" class="d-none" @change="handleDashboardFileUpload" />
+        <v-btn variant="outlined" color="primary" prepend-icon="mdi-file-upload-outline" size="large" class="rounded-lg font-weight-bold" @click="triggerDashboardImport">
+          Impor JSON (ROI)
+        </v-btn>
         <v-btn color="primary" prepend-icon="mdi-plus" size="large" class="rounded-lg font-weight-bold" @click="createNewTemplate">
           Buat Baru
         </v-btn>
@@ -49,7 +53,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useOmrStore } from '../store/omrStore';
 import type { OmrTemplate } from '../db/database';
@@ -57,6 +61,31 @@ import { exportSvgToPdf } from '../utils/pdfExport';
 
 const router = useRouter();
 const omrStore = useOmrStore();
+const dashboardFileInputRef = ref<HTMLInputElement | null>(null);
+
+const triggerDashboardImport = () => {
+  if (dashboardFileInputRef.value) {
+    dashboardFileInputRef.value.click();
+  }
+};
+
+const handleDashboardFileUpload = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  if (!target.files || target.files.length === 0) return;
+  const file = target.files[0];
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const content = String(e.target?.result || '');
+      const imported = await omrStore.importTemplateFromJson(content);
+      omrStore.openTemplate(imported);
+      router.push('/designer');
+    } catch (err: any) {
+      omrStore.showToast(`Gagal mengimpor templat: ${err.message}`, 'error');
+    }
+  };
+  reader.readAsText(file);
+};
 
 const createNewTemplate = () => {
   omrStore.createNewTemplate();

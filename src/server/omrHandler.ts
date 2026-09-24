@@ -187,28 +187,62 @@ export async function handleOmrScan(req: Request | any, res: Response | any) {
       }
     }
 
-    // Prepare template description context for Gemini
-    let templateContext = "";
-    if (template) {
-      templateContext = `
-Konfigurasi Templat LJK:
-Nama Templat: ${template.name || 'Lembar Jawaban'}
-Blok Identitas & Soal yang Diharapkan:
-${JSON.stringify(
-  template.blocks?.map(b => ({
-    tipe: b.type,
-    judul: b.title,
-    arah: b.direction,
-    kolom: b.cols,
-    baris: b.rows,
-    opsi: b.options,
-    nomor_mulai: b.startNum,
-    nilai_awal: b.prefillValue
-  })),
-  null,
-  2
-)}`;
+    // Prepare template description context for Gemini with detailed ROI specifications
+    function buildDetailedRoiContext(tpl?: any): string {
+      if (!tpl) return "";
+
+      const blocksInfo = (tpl.blocks || []).map((b: any) => {
+        let detail = `- Blok [${b.title || b.type}] (Tipe: ${b.type}, ID: ${b.id}):\n`;
+        if (b.type === 'handwritten_identity') {
+          detail += `  * Area: Bagian atas LJK (y ≈ 135 - 330px)\n`;
+          detail += `  * Isian: Kotak Nama Siswa, Kelas, No. Peserta, Tanggal Ujian, Pernyataan Kejujuran, Tanda Tangan.`;
+        } else if (b.type === 'identity_nisn') {
+          detail += `  * Area: Kolom identitas kiri (x ≈ 90px, y ≈ 360 - 700px)\n`;
+          detail += `  * Struktur: 10 kolom digit (0-9). Kotak angka di atas, bulatan hitam vertikal 0-9 di bawahnya.`;
+        } else if (b.type === 'identity_npsn') {
+          detail += `  * Area: Kolom identitas tengah (x ≈ 442px, y ≈ 360 - 700px)\n`;
+          detail += `  * Struktur: 8 kolom digit (0-9). Nilai standar SMPN 2 Kemranjen: "20301942".`;
+        } else if (b.type === 'identity_subject') {
+          detail += `  * Area: Kolom ID Mapel (x ≈ 725px, y ≈ 360 - 700px), 2 kolom digit (0-9).`;
+        } else if (b.type === 'identity_test') {
+          detail += `  * Area: Kolom Kode Tes (x ≈ 820px, y ≈ 360 - 700px), 2 kolom digit (0-9).`;
+        } else if (b.type === 'biasa') {
+          const endNum = (b.startNum || 1) + (b.rows || 1) - 1;
+          detail += `  * Area: Kolom kiri lembar (x ≈ 90px, y ≈ 735 - 1100px)\n`;
+          detail += `  * Butir Soal: No. ${b.startNum || 1} sampai No. ${endNum} (Pilihan Ganda Bulat 4 opsi: A, B, C, D).\n`;
+          detail += `  * Format Jawaban: 1 huruf terpilih per butir soal, contoh ["A"] atau ["C"]. Kosong jika tidak dijawab.`;
+        } else if (b.type === 'bs3') {
+          const endNum = (b.startNum || 1) + (b.rows || 1) - 1;
+          detail += `  * Area: Kolom tengah lembar (x ≈ 310px atau x ≈ 485px, y ≈ 735 - 1100px)\n`;
+          detail += `  * Butir Soal: No. ${b.startNum || 1} sampai No. ${endNum} (Benar / Salah 3 Baris Pernyataan per butir).\n`;
+          detail += `  * Format Jawaban: Tepat 3 string dalam array per nomor soal, misalnya ["B", "S", "B"].`;
+        } else if (b.type === 'kompleks') {
+          const endNum = (b.startNum || 1) + (b.rows || 1) - 1;
+          detail += `  * Area: Kolom kanan lembar (x ≈ 680px, y ≈ 735 - 1100px)\n`;
+          detail += `  * Butir Soal: No. ${b.startNum || 1} sampai No. ${endNum} (Pilihan Ganda Kompleks - KOTAK CENTANG PERSEGI A, B, C, D).\n`;
+          detail += `  * ATURAN KRUSIAL KOTAK: Huruf bawaan di dalam kotak putih adalah KOSONG. Hanya kotak yang DIHITAMKAN/DIARSIR PEKAT pensil yang menjadi jawaban, contoh ["A", "D"] atau ["B"]. Jangan pernah menjawab semua ["A","B","C","D"] kecuali seluruh kotak benar-benar hitam pekat!`;
+        } else if (b.type === 'jodoh') {
+          const endNum = (b.startNum || 1) + (b.rows || 1) - 1;
+          detail += `  * Area: Bagian bawah lembar (y ≈ 1135 - 1280px)\n`;
+          detail += `  * Butir Soal: No. ${b.startNum || 1} sampai No. ${endNum} (Menjodohkan 4 opsi A, B, C, D).`;
+        } else if (b.type === 'teks_kustom') {
+          detail += `  * Area: Kanan bawah (y ≈ 1135px), kotak catatan petunjuk pelaksanaan ujian.`;
+        }
+        return detail;
+      }).join('\n');
+
+      return `
+SPESIFIKASI DETEKSI ROI & TATA LETAK LJK (SMPN 2 Kemranjen):
+Nama Lembar: ${tpl.name || 'PENILAIAN TENGAH SEMESTER (PTS) - SMPN 2 KEMRANJEN'}
+Dimensi Kanvas Acuan: 1000 x 1414 piksel (Rasio Standar A4 / F4)
+Fiducial Penanda 4 Sudut: Kiri Atas (50, 50), Kanan Atas (950, 50), Kiri Bawah (50, 1364), Kanan Bawah (950, 1364).
+
+PANDUAN ROI PER BLOK ELEMEN:
+${blocksInfo}
+`;
     }
+
+    const templateContext = buildDetailedRoiContext(template);
 
     const promptText = `Anda adalah asisten AI spesialis Optical Mark Recognition (OMR) dan Optical Character Recognition (OCR) presisi tinggi untuk Lembar Jawab Komputer (LJK) Indonesia.
 Tugas Anda: Pindai gambar LJK terlampir dan ekstrak seluruh data peserta (tulisan tangan), identitas digital (kotak angka dan bulatan hitam), serta jawaban soal yang dihitamkan dengan sangat akurat dan objektif sesuai citra aktual.
