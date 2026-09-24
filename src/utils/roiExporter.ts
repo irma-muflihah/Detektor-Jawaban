@@ -423,8 +423,8 @@ export function importOmrTemplateFromJson(input: string | Record<string, any>): 
     throw new Error('Format JSON tidak valid.');
   }
 
-  let templateName = 'PENILAIAN TENGAH SEMESTER (PTS) - SMPN 2 KEMRANJEN';
-  let templateId = 'tpl_' + Date.now().toString(36);
+  let templateName = 'Lembar Jawaban Latihan TKA 1';
+  let templateId = 'tpl_latihan_tka';
   let rawBlocks: any[] = [];
 
   if (data.metadata?.template_name) {

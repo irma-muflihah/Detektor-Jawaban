@@ -54,7 +54,7 @@
           prepend-icon="mdi-restore" 
           @click="omrStore.resetToDefaultTemplate"
         >
-          Default SMPN 2 Kemranjen
+          Default Latihan TKA 1
         </v-btn>
 
         <v-btn 
@@ -1089,9 +1089,9 @@ const executeImportJson = async () => {
 
 onMounted(async () => {
   await omrStore.loadTemplatesFromDB();
-  // Pastikan templat aktif tersedia; jika belum ada atau kosong, aktifkan templat standar SMPN 2 Kemranjen
-  if (!omrStore.activeTemplate.id || omrStore.activeTemplate.blocks.length === 0) {
-    omrStore.resetToDefaultTemplate();
+  // Pastikan templat aktif disesuaikan dengan desain standar Lembar Jawaban Latihan TKA 1
+  if (!omrStore.activeTemplate.id || omrStore.activeTemplate.blocks.length === 0 || omrStore.activeTemplate.name.includes('PTS')) {
+    await omrStore.resetToDefaultTemplate();
   }
 });
 </script>

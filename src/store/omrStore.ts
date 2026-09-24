@@ -56,19 +56,19 @@ export const useOmrStore = defineStore('omr', () => {
     return bubbles;
   };
 
-  // Templat Default LJK Standar SMPN 2 Kemranjen untuk semua mata pelajaran dengan ROI presisi
+  // Templat Default LJK Standar Sesuai Spesifikasi JSON ROI: Lembar Jawaban Latihan TKA 1
   const createDefaultTemplate = (): OmrTemplate => {
     const tpl: OmrTemplate = {
-      id: 'tpl_smpn2_kemranjen',
-      name: 'PENILAIAN TENGAH SEMESTER (PTS) - SMPN 2 KEMRANJEN',
-      updatedAt: Date.now(),
+      id: 'tpl_latihan_tka',
+      name: 'Lembar Jawaban Latihan TKA 1',
+      updatedAt: 1790211690344,
       autoLayout: false,
       blocks: [
-        // 1. Data Peserta (Mulai pada y=135 untuk memberi jarak aman 40px+ dari judul di y=95 dan ticker mark)
+        // 1. Data Peserta (Mulai pada y=150 sesuai spesifikasi JSON ROI)
         {
           id: 1,
           x: 90,
-          y: 135,
+          y: 150,
           type: 'handwritten_identity',
           title: 'Data Peserta',
           direction: 'handwritten',
@@ -77,11 +77,11 @@ export const useOmrStore = defineStore('omr', () => {
           options: [],
           prefillValue: ''
         },
-        // 2. NISN (10 kolom)
+        // 2. NISN (10 kolom pada y=400)
         {
           id: 2,
           x: 90,
-          y: 360,
+          y: 400,
           type: 'identity_nisn',
           title: 'NISN',
           direction: 'vertical',
@@ -90,11 +90,11 @@ export const useOmrStore = defineStore('omr', () => {
           options: ['0','1','2','3','4','5','6','7','8','9'],
           prefillValue: ''
         },
-        // 3. NPSN (8 kolom, baku terisi NPSN SMPN 2 Kemranjen: 20301942)
+        // 3. NPSN (8 kolom pada y=400, prefilled: '20301942')
         {
           id: 3,
           x: 442,
-          y: 360,
+          y: 400,
           type: 'identity_npsn',
           title: 'NPSN',
           direction: 'vertical',
@@ -103,37 +103,37 @@ export const useOmrStore = defineStore('omr', () => {
           options: ['0','1','2','3','4','5','6','7','8','9'],
           prefillValue: '20301942'
         },
-        // 4. ID Mapel (2 kolom, general dapat diisi kode mapel apa saja)
+        // 4. ID Mapel (2 kolom pada y=400)
         {
           id: 4,
           x: 725,
-          y: 360,
+          y: 400,
           type: 'identity_subject',
           title: 'ID Mapel',
           direction: 'vertical',
           cols: 2,
           rows: 10,
           options: ['0','1','2','3','4','5','6','7','8','9'],
-          prefillValue: '01'
+          prefillValue: ''
         },
-        // 5. Kode Tes (2 kolom)
+        // 5. Kode Tes (2 kolom pada y=400)
         {
           id: 5,
           x: 820,
-          y: 360,
+          y: 400,
           type: 'identity_test',
           title: 'Kode Tes',
           direction: 'vertical',
           cols: 2,
           rows: 10,
           options: ['0','1','2','3','4','5','6','7','8','9'],
-          prefillValue: '01'
+          prefillValue: ''
         },
-        // 6. Pilihan Ganda (PG Biasa: No. 1 - 12)
+        // 6. Pilihan Ganda (PG Biasa: No. 1 - 12 pada y=785)
         {
           id: 6,
           x: 90,
-          y: 735,
+          y: 785,
           type: 'biasa',
           title: 'PG Biasa',
           direction: 'horizontal',
@@ -141,11 +141,11 @@ export const useOmrStore = defineStore('omr', () => {
           options: ['A', 'B', 'C', 'D'],
           startNum: 1
         },
-        // 7. Benar / Salah (3 Baris) (BS 3 set: No. 13 - 15)
+        // 7. Benar / Salah (3 Baris) (BS 3 set: No. 13 - 15 pada y=785)
         {
           id: 7,
-          x: 310,
-          y: 735,
+          x: 320,
+          y: 785,
           type: 'bs3',
           title: 'BS (3 set)',
           direction: 'horizontal',
@@ -153,11 +153,11 @@ export const useOmrStore = defineStore('omr', () => {
           options: ['B', 'S'],
           startNum: 13
         },
-        // 8. Benar / Salah (3 Baris) (BS 3 set: No. 16 - 18)
+        // 8. Benar / Salah (3 Baris) (BS 3 set: No. 16 - 18 pada y=785)
         {
           id: 8,
-          x: 485,
-          y: 735,
+          x: 495,
+          y: 785,
           type: 'bs3',
           title: 'BS (3 set)',
           direction: 'horizontal',
@@ -165,11 +165,11 @@ export const useOmrStore = defineStore('omr', () => {
           options: ['B', 'S'],
           startNum: 16
         },
-        // 9. Pilihan Ganda Kompleks (PG Kompleks Kotak: No. 19 - 24)
+        // 9. Pilihan Ganda Kompleks (PG Kompleks: No. 19 - 24 pada y=785)
         {
           id: 9,
-          x: 680,
-          y: 735,
+          x: 700,
+          y: 785,
           type: 'kompleks',
           title: 'PG Kompleks',
           direction: 'horizontal',
@@ -177,11 +177,11 @@ export const useOmrStore = defineStore('omr', () => {
           options: ['A', 'B', 'C', 'D'],
           startNum: 19
         },
-        // 10. Menjodohkan (No. 25 - 27)
+        // 10. Menjodohkan (No. 25 - 27 pada y=1194)
         {
           id: 10,
           x: 90,
-          y: 1135,
+          y: 1194,
           type: 'jodoh',
           title: 'Menjodohkan',
           direction: 'horizontal',
@@ -189,11 +189,11 @@ export const useOmrStore = defineStore('omr', () => {
           options: ['A', 'B', 'C', 'D'],
           startNum: 25
         },
-        // 11. Menjodohkan (No. 28 - 30)
+        // 11. Menjodohkan (No. 28 - 30 pada y=1194)
         {
           id: 11,
-          x: 310,
-          y: 1135,
+          x: 320,
+          y: 1194,
           type: 'jodoh',
           title: 'Menjodohkan',
           direction: 'horizontal',
@@ -201,17 +201,17 @@ export const useOmrStore = defineStore('omr', () => {
           options: ['A', 'B', 'C', 'D'],
           startNum: 28
         },
-        // 12. Catatan / Petunjuk Ujian
+        // 12. Catatan / Petunjuk Ujian (pada y=1194)
         {
           id: 12,
           x: 565,
-          y: 1135,
+          y: 1194,
           type: 'teks_kustom',
           title: 'Catatan',
           direction: 'teks',
           cols: 345,
           rows: 115,
-          prefillValue: 'Jaga lembar jawaban agar tidak terlipat, basah, robek, atau kotor, serta pastikan tidak ada coretan lain agar lembar ujianmu terbaca sempurna oleh mesin pemindai SMPN 2 Kemranjen.'
+          prefillValue: 'Jaga lembar jawaban agar tidak terlipat, basah, robek, atau kotor, serta pastikan tidak ada coretan lain agar lembar ujianmu terbaca sempurna oleh mesin pemindai.'
         }
       ]
     };
@@ -248,7 +248,7 @@ export const useOmrStore = defineStore('omr', () => {
   };
 
   const savedTemplates = ref<OmrTemplate[]>([]);
-  // Standar Default: Membuka template LJK SMPN 2 Kemranjen lengkap dengan 30 butir soal dan seluruh ROI
+  // Standar Default: Membuka template LJK Lembar Jawaban Latihan TKA 1 lengkap dengan 30 butir soal dan seluruh ROI
   const activeTemplate = ref<OmrTemplate>(createDefaultTemplate());
   const snackbar = ref({ show: false, text: '', color: 'info' });
 
@@ -260,22 +260,20 @@ export const useOmrStore = defineStore('omr', () => {
     try {
       let data = await db.templates.orderBy('updatedAt').reverse().toArray();
 
-      // Pastikan templat default "PENILAIAN TENGAH SEMESTER (PTS) - SMPN 2 KEMRANJEN" selalu tersedia di database
+      // Pastikan templat default "Lembar Jawaban Latihan TKA 1" selalu tersedia di database
       const defaultTpl = createDefaultTemplate();
       const existingIdx = data.findIndex(t => 
-        t.id === 'tpl_smpn2_kemranjen' || 
         t.id === 'tpl_latihan_tka' ||
-        t.name === 'PENILAIAN TENGAH SEMESTER (PTS) - SMPN 2 KEMRANJEN' ||
-        t.name === 'Lembar Jawaban Latihan TKA 1'
+        t.name === 'Lembar Jawaban Latihan TKA 1' ||
+        t.id === 'tpl_smpn2_kemranjen'
       );
 
       if (existingIdx === -1) {
         await db.templates.put(defaultTpl);
         data.unshift(defaultTpl);
       } else {
-        // Perbarui jika templat lama masih memakai nama atau ID lama
-        if (data[existingIdx].id === 'tpl_latihan_tka') {
-          await db.templates.delete('tpl_latihan_tka');
+        if (data[existingIdx].id === 'tpl_smpn2_kemranjen') {
+          await db.templates.delete('tpl_smpn2_kemranjen');
         }
         await db.templates.put(defaultTpl);
         data[existingIdx] = defaultTpl;
@@ -333,9 +331,9 @@ export const useOmrStore = defineStore('omr', () => {
         } catch (_) {}
       });
 
-      // UX: Jika activeTemplate masih kosong (misal hanya blok identitas <= 5) atau belum ber-ID, gunakan templat default
-      if (!activeTemplate.value.id || activeTemplate.value.blocks.length <= 5) {
-        activeTemplate.value = JSON.parse(JSON.stringify(data[0] || defaultTpl));
+      // UX: Jika activeTemplate masih kosong atau belum disesuaikan ke templat default TKA 1
+      if (!activeTemplate.value.id || activeTemplate.value.blocks.length <= 5 || activeTemplate.value.id === 'tpl_smpn2_kemranjen') {
+        activeTemplate.value = JSON.parse(JSON.stringify(defaultTpl));
       }
     } catch (error: any) {
       showToast(`Gagal memuat templat: ${error.message}`, 'error');
@@ -395,9 +393,12 @@ export const useOmrStore = defineStore('omr', () => {
     activeTemplate.value = createCleanEmptyTemplate();
   };
 
-  const resetToDefaultTemplate = () => {
-    activeTemplate.value = createDefaultTemplate();
-    showToast('Templat dikembalikan ke standar default SMPN 2 Kemranjen.', 'info');
+  const resetToDefaultTemplate = async () => {
+    const defTpl = createDefaultTemplate();
+    activeTemplate.value = defTpl;
+    await db.templates.put(defTpl);
+    await saveBaselineRoi(defTpl);
+    showToast('Templat dikembalikan ke standar Lembar Jawaban Latihan TKA 1.', 'info');
   };
 
   const openTemplate = (templateData: OmrTemplate) => {
